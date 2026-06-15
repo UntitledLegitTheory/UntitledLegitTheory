@@ -1,4 +1,4 @@
--- // Matcha Cheat Menu v7 - Right Shift menu, all bugs fixed
+-- // Matcha Cheat Menu v8 - Vertical tabs, no emojis, fixed parent lock
 if getgenv().MatchaMenuLoaded then return end
 getgenv().MatchaMenuLoaded = true
 
@@ -9,7 +9,7 @@ local runService = game:GetService("RunService")
 local userInputService = game:GetService("UserInputService")
 local players = game:GetService("Players")
 
--- ========== НАСТРОЙКИ ==========
+-- ========== SETTINGS ==========
 local settings = {
     aimlock = false,
     silentAim = false,
@@ -38,7 +38,7 @@ local settings = {
     espNameColor = Color3.fromRGB(255, 255, 255),
 }
 
--- Внутренние переменные
+-- ========== INTERNAL VARS ==========
 local silentActive = false
 local bodyVelocity, bodyGyro = nil, nil
 local originalWalkSpeed = 16
@@ -47,7 +47,7 @@ local flyActive = false
 local espObjects = {}
 local drawingAvailable = pcall(function() return Drawing.new("Square") end)
 
--- FOV круг (вокруг мыши)
+-- FOV circle (around mouse)
 local fovCircle = drawingAvailable and Drawing.new("Circle") or nil
 if fovCircle then
     fovCircle.Thickness = 2
@@ -58,13 +58,12 @@ if fovCircle then
     fovCircle.Visible = false
 end
 
--- ========== УТИЛИТЫ ==========
-local function tableFind(t, value)
-    for i, v in ipairs(t) do if v == value then return i end end
+-- ========== UTILS ==========
+local function tableFind(t, val)
+    for i, v in ipairs(t) do if v == val then return i end end
     return nil
 end
 
--- ========== ПОЛУЧЕНИЕ ПОЗИЦИИ ЦЕЛИ ==========
 local function getAimPosition(character)
     if not character then return nil end
     local part = nil
@@ -124,7 +123,7 @@ local function getNearestTargetFromCursor()
     return nearest
 end
 
--- ========== AIMLOCK (С ПОДДЕРЖКОЙ mouse + fallback) ==========
+-- ========== AIMLOCK (MOUSE) ==========
 local function moveMouseToTarget(targetInfo)
     if not targetInfo or not targetInfo.position then return end
     local screenPos, onScreen = camera:WorldToViewportPoint(targetInfo.position)
@@ -134,7 +133,6 @@ local function moveMouseToTarget(targetInfo)
             if mousemoverel then
                 mousemoverel(delta.X, delta.Y)
             else
-                -- fallback: плавное перемещение камеры (менее точно, но работает)
                 local direction = (targetInfo.position - camera.CFrame.Position).Unit
                 local targetCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + direction)
                 camera.CFrame = camera.CFrame:Lerp(targetCFrame, settings.smoothness)
@@ -157,7 +155,7 @@ runService.RenderStepped:Connect(function()
     end
 end)
 
--- ========== SILENT AIM (MAGIC BULLET) ==========
+-- ========== SILENT AIM ==========
 local oldNamecall, mt
 local function enableSilentAim()
     if silentActive or not getrawmetatable then return end
@@ -192,7 +190,7 @@ local function disableSilentAim()
     silentActive = false
 end
 
--- ========== ESP (ПЕРЕИСПОЛЬЗОВАНИЕ ОБЪЕКТОВ) ==========
+-- ========== ESP ==========
 local function updateESP()
     if not drawingAvailable or not settings.esp then
         for _, d in pairs(espObjects) do
@@ -245,7 +243,7 @@ local function updateESP()
                 local text = ""
                 if settings.espShowName then text = plr.Name end
                 if settings.espShowDistance then text = text .. " [" .. math.floor(distance) .. "m]" end
-                if settings.espShowHealth then text = text .. " ❤" .. math.floor(hum.Health) end
+                if settings.espShowHealth then text = text .. " [" .. math.floor(hum.Health) .. " HP]" end
                 drawings.name.Text = text
                 drawings.name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 15)
                 drawings.name.Visible = true
@@ -410,93 +408,86 @@ player.CharacterAdded:Connect(function()
     if settings.fly then task.wait(0.5); enableFly() end
 end)
 
--- ========== ШИРОКОЕ МЕНЮ (750x350) Right Shift ==========
+-- ========== GUI: VERTICAL TABS, NO EMOJIS, FIXED PARENT LOCK ==========
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MatchaMenu"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 750, 0, 350)
-mainFrame.Position = UDim2.new(0.5, -375, 0.5, -175)
-mainFrame.BackgroundColor3 = Color3.fromRGB(20, 22, 25)
-mainFrame.BackgroundTransparency = 0.1
+mainFrame.Size = UDim2.new(0, 800, 0, 500)
+mainFrame.Position = UDim2.new(0.5, -400, 0.5, -250)
+mainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 22)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
+mainFrame.Visible = true
 mainFrame.Parent = screenGui
 local corner = Instance.new("UICorner", mainFrame)
-corner.CornerRadius = UDim.new(0, 12)
-pcall(function() mainFrame.BackgroundTransparency = 0.25 end)
+corner.CornerRadius = UDim.new(0, 10)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 40)
 title.BackgroundTransparency = 1
-title.Text = "✦  MATCHA CHEAT MENU  ✦"
+title.Text = "MATCHA CHEAT MENU"
 title.TextColor3 = Color3.fromRGB(80, 200, 120)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
 title.Parent = mainFrame
 
-local tabBar = Instance.new("Frame")
-tabBar.Size = UDim2.new(1, 0, 0, 36)
-tabBar.Position = UDim2.new(0, 0, 0, 40)
-tabBar.BackgroundTransparency = 1
-tabBar.Parent = mainFrame
+-- Left sidebar (vertical tabs)
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, 140, 1, -40)
+sidebar.Position = UDim2.new(0, 0, 0, 40)
+sidebar.BackgroundColor3 = Color3.fromRGB(24, 26, 28)
+sidebar.BorderSizePixel = 0
+sidebar.Parent = mainFrame
+local sidebarCorner = Instance.new("UICorner", sidebar)
+sidebarCorner.CornerRadius = UDim.new(0, 8)
 
-local tabs = {"⚔️ Combat", "👁️ ESP", "🧬 Character", "⚙️ Misc"}
-local activeTab = "⚔️ Combat"
+-- Right content area
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(1, -150, 1, -50)
+contentArea.Position = UDim2.new(0, 150, 0, 45)
+contentArea.BackgroundTransparency = 1
+contentArea.Parent = mainFrame
+
+-- Tab buttons (vertical)
+local tabNames = {"Combat", "ESP", "Character", "Misc"}
 local tabButtons = {}
-local contentFrame = Instance.new("Frame")
-contentFrame.Size = UDim2.new(1, -20, 1, -86)
-contentFrame.Position = UDim2.new(0, 10, 0, 76)
-contentFrame.BackgroundTransparency = 1
-contentFrame.Parent = mainFrame
+local activeTab = "Combat"
+local contentFrames = {} -- храним панели для каждой вкладки, чтобы не пересоздавать
 
-local leftCol = Instance.new("Frame")
-leftCol.Size = UDim2.new(0.48, 0, 1, 0)
-leftCol.Position = UDim2.new(0, 0, 0, 0)
-leftCol.BackgroundTransparency = 1
-leftCol.Parent = contentFrame
-
-local rightCol = Instance.new("Frame")
-rightCol.Size = UDim2.new(0.48, 0, 1, 0)
-rightCol.Position = UDim2.new(0.52, 0, 0, 0)
-rightCol.BackgroundTransparency = 1
-rightCol.Parent = contentFrame
-
-for i, name in ipairs(tabs) do
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 120, 1, 0)
-    btn.Position = UDim2.new(0, (i-1)*125, 0, 0)
-    btn.BackgroundTransparency = 1
-    btn.Text = name
-    btn.TextColor3 = Color3.fromRGB(200, 200, 220)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.Gotham
-    btn.Parent = tabBar
-    tabButtons[name] = btn
-    btn.MouseButton1Click:Connect(function()
-        activeTab = name
-        for _, b in pairs(tabButtons) do b.TextColor3 = Color3.fromRGB(200,200,220) end
-        btn.TextColor3 = Color3.fromRGB(80, 200, 120)
-        for _, child in ipairs(contentFrame:GetChildren()) do child:Destroy() end
-        leftCol.Parent = contentFrame
-        rightCol.Parent = contentFrame
-        populateTab(activeTab)
-    end)
+local function createContentPanel(tabName)
+    local panel = Instance.new("Frame")
+    panel.Size = UDim2.new(1, 0, 1, 0)
+    panel.BackgroundTransparency = 1
+    panel.Visible = (tabName == activeTab)
+    panel.Parent = contentArea
+    
+    -- Две колонки внутри панели
+    local leftCol = Instance.new("Frame")
+    leftCol.Size = UDim2.new(0.48, 0, 1, 0)
+    leftCol.Position = UDim2.new(0, 0, 0, 0)
+    leftCol.BackgroundTransparency = 1
+    leftCol.Parent = panel
+    
+    local rightCol = Instance.new("Frame")
+    rightCol.Size = UDim2.new(0.48, 0, 1, 0)
+    rightCol.Position = UDim2.new(0.52, 0, 0, 0)
+    rightCol.BackgroundTransparency = 1
+    rightCol.Parent = panel
+    
+    return {panel = panel, left = leftCol, right = rightCol}
 end
-tabButtons["⚔️ Combat"].TextColor3 = Color3.fromRGB(80, 200, 120)
 
--- Хранилище для динамических элементов UI, чтобы обновлять их без пересоздания всей вкладки
-local uiElements = {}
-
-local function createToggle(parent, text, y, getter, setter, id)
+-- Вспомогательные функции UI
+local function createToggle(parent, text, y, getter, setter)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.9, 0, 0, 32)
+    btn.Size = UDim2.new(0.9, 0, 0, 34)
     btn.Position = UDim2.new(0, 0, 0, y)
-    btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(50, 50, 55)
-    btn.Text = text .. (getter() and " ✓" or "")
+    btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(50, 52, 55)
+    btn.Text = text .. (getter() and "  ON" or "  OFF")
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
     btn.Font = Enum.Font.Gotham
@@ -504,8 +495,8 @@ local function createToggle(parent, text, y, getter, setter, id)
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseButton1Click:Connect(function()
         setter(not getter())
-        btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(50, 50, 55)
-        btn.Text = text .. (getter() and " ✓" or "")
+        btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(50, 52, 55)
+        btn.Text = text .. (getter() and "  ON" or "  OFF")
         if text:find("Silent") then
             if settings.silentAim then enableSilentAim() else disableSilentAim() end
         end
@@ -514,23 +505,12 @@ local function createToggle(parent, text, y, getter, setter, id)
         end
         if text:find("Speed") and not getter() then resetWalkSpeed() end
     end)
-    if id then uiElements[id] = btn end
     return btn
 end
 
-local function updateToggle(id, getter)
-    local btn = uiElements[id]
-    if btn then
-        local text = btn.Text:gsub(" ✓", ""):gsub(" ON", ""):gsub(" OFF", "")
-        local isOn = getter()
-        btn.BackgroundColor3 = isOn and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(50, 50, 55)
-        btn.Text = text .. (isOn and " ✓" or "")
-    end
-end
-
-local function createSlider(parent, name, y, minVal, maxVal, getter, setter, id)
+local function createSlider(parent, name, y, minVal, maxVal, getter, setter)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.9, 0, 0, 50)
+    frame.Size = UDim2.new(0.9, 0, 0, 52)
     frame.Position = UDim2.new(0, 0, 0, y)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
@@ -547,7 +527,7 @@ local function createSlider(parent, name, y, minVal, maxVal, getter, setter, id)
     local box = Instance.new("TextBox")
     box.Size = UDim2.new(0.35, 0, 0, 28)
     box.Position = UDim2.new(0.6, 0, 0, 0)
-    box.BackgroundColor3 = Color3.fromRGB(40,40,45)
+    box.BackgroundColor3 = Color3.fromRGB(40,42,45)
     box.Text = tostring(getter())
     box.TextColor3 = Color3.new(1,1,1)
     box.Font = Enum.Font.Gotham
@@ -565,12 +545,11 @@ local function createSlider(parent, name, y, minVal, maxVal, getter, setter, id)
     end
     box.FocusLost:Connect(function() update(box.Text) end)
     update(getter())
-    if id then uiElements[id] = {label = label, box = box, update = update} end
 end
 
 local function createColorPicker(parent, name, y, getter, setter)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.9, 0, 0, 30)
+    frame.Size = UDim2.new(0.9, 0, 0, 32)
     frame.Position = UDim2.new(0, 0, 0, y)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
@@ -595,7 +574,7 @@ local function createColorPicker(parent, name, y, getter, setter)
         local picker = Instance.new("Frame")
         picker.Size = UDim2.new(0, 180, 0, 120)
         picker.Position = UDim2.new(0.5, -90, 0.5, -60)
-        picker.BackgroundColor3 = Color3.fromRGB(30,30,35)
+        picker.BackgroundColor3 = Color3.fromRGB(30,32,35)
         picker.Parent = screenGui
         local colors = {Color3.new(1,0.2,0.2), Color3.new(0.2,1,0.2), Color3.new(0.2,0.5,1), Color3.new(1,1,0.2), Color3.new(1,0.5,0), Color3.new(1,0,1), Color3.new(0,1,1)}
         for i, col in ipairs(colors) do
@@ -616,7 +595,7 @@ end
 
 local function createDropdown(parent, name, y, options, getter, setter)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.9, 0, 0, 50)
+    frame.Size = UDim2.new(0.9, 0, 0, 52)
     frame.Position = UDim2.new(0, 0, 0, y)
     frame.BackgroundTransparency = 1
     frame.Parent = parent
@@ -633,7 +612,7 @@ local function createDropdown(parent, name, y, options, getter, setter)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.45, 0, 0, 32)
     btn.Position = UDim2.new(0.5, 0, 0, 0)
-    btn.BackgroundColor3 = Color3.fromRGB(50,50,55)
+    btn.BackgroundColor3 = Color3.fromRGB(50,52,55)
     btn.Text = getter()
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
@@ -645,7 +624,7 @@ local function createDropdown(parent, name, y, options, getter, setter)
         local dropdownFrame = Instance.new("Frame")
         dropdownFrame.Size = UDim2.new(0, 140, 0, #options * 32)
         dropdownFrame.Position = UDim2.new(0, btn.AbsolutePosition.X - frame.AbsolutePosition.X, 0, 32)
-        dropdownFrame.BackgroundColor3 = Color3.fromRGB(40,40,45)
+        dropdownFrame.BackgroundColor3 = Color3.fromRGB(40,42,45)
         dropdownFrame.Parent = frame
         Instance.new("UICorner", dropdownFrame).CornerRadius = UDim.new(0, 6)
         for i, opt in ipairs(options) do
@@ -676,61 +655,107 @@ local function createDropdown(parent, name, y, options, getter, setter)
     end)
 end
 
-function populateTab(tab)
-    if tab == "⚔️ Combat" then
-        createToggle(leftCol, "Aimlock (Hold F)", 10, function() return settings.aimlock end, function(v) settings.aimlock = v end, "aimlock")
-        createToggle(leftCol, "Silent Aim", 55, function() return settings.silentAim end, function(v) settings.silentAim = v; if v then enableSilentAim() else disableSilentAim() end end, "silent")
-        createToggle(leftCol, "Team Check", 100, function() return settings.teamCheck end, function(v) settings.teamCheck = v end, "team")
-        createToggle(leftCol, "Wall Check", 145, function() return settings.wallCheck end, function(v) settings.wallCheck = v end, "wall")
-        createDropdown(leftCol, "Aim Part", 200, {"Head", "Torso", "Random"}, function() return settings.aimPart end, function(v) settings.aimPart = v end)
-        createSlider(rightCol, "FOV (pixels)", 10, 30, 400, function() return settings.fov end, function(v) settings.fov = v end)
-        createSlider(rightCol, "Smoothness", 70, 0.1, 1, function() return settings.smoothness end, function(v) settings.smoothness = v end)
-    elseif tab == "👁️ ESP" then
-        createToggle(leftCol, "Enable ESP", 10, function() return settings.esp end, function(v) settings.esp = v end, "esp")
-        createToggle(leftCol, "Show Name", 55, function() return settings.espShowName end, function(v) settings.espShowName = v end, "espname")
-        createToggle(leftCol, "Show Health", 100, function() return settings.espShowHealth end, function(v) settings.espShowHealth = v end, "esphealth")
-        createToggle(leftCol, "Show Distance", 145, function() return settings.espShowDistance end, function(v) settings.espShowDistance = v end, "espdist")
-        createSlider(rightCol, "Max Distance", 10, 50, 800, function() return settings.espMaxDistance end, function(v) settings.espMaxDistance = v end)
-        createSlider(rightCol, "Box Thickness", 70, 1, 5, function() return settings.espBoxThickness end, function(v) settings.espBoxThickness = v end)
-        createColorPicker(rightCol, "Box Color", 130, function() return settings.espBoxColor end, function(v) settings.espBoxColor = v end)
-        createColorPicker(rightCol, "Name Color", 180, function() return settings.espNameColor end, function(v) settings.espNameColor = v end)
-        local boxTypeBtn = Instance.new("TextButton")
-        boxTypeBtn.Size = UDim2.new(0.9, 0, 0, 32)
-        boxTypeBtn.Position = UDim2.new(0, 0, 0, 230)
-        boxTypeBtn.BackgroundColor3 = Color3.fromRGB(50,50,55)
-        boxTypeBtn.Text = "Box Type: " .. settings.espBoxType
-        boxTypeBtn.TextColor3 = Color3.new(1,1,1)
-        boxTypeBtn.Font = Enum.Font.Gotham
-        boxTypeBtn.Parent = rightCol
-        boxTypeBtn.MouseButton1Click:Connect(function()
-            local types = {"Square", "Corner", "Glow"}
-            local idx = tableFind(types, settings.espBoxType) or 1
-            idx = idx % 3 + 1
-            settings.espBoxType = types[idx]
-            boxTypeBtn.Text = "Box Type: " .. settings.espBoxType
-        end)
-    elseif tab == "🧬 Character" then
-        createToggle(leftCol, "Speed Hack", 10, function() return settings.speedHack end, function(v) settings.speedHack = v end, "speed")
-        createSlider(leftCol, "Speed Multiplier", 65, 1, 10, function() return settings.speedMult end, function(v) settings.speedMult = v end)
-        createToggle(rightCol, "Fly Hack", 10, function() return settings.fly end, function(v) settings.fly = v; if v then enableFly() else disableFly() end end, "fly")
-        createSlider(rightCol, "Fly Speed", 65, 10, 200, function() return settings.flySpeed end, function(v) settings.flySpeed = v end)
-        createToggle(rightCol, "Noclip", 130, function() return settings.noclip end, function(v) settings.noclip = v end, "noclip")
-    elseif tab == "⚙️ Misc" then
-        local keyLabel = Instance.new("TextLabel")
-        keyLabel.Size = UDim2.new(0.9, 0, 0, 180)
-        keyLabel.Position = UDim2.new(0, 0, 0, 10)
-        keyLabel.BackgroundTransparency = 1
-        keyLabel.Text = "⌨️  KEYBINDS\n\nRight Shift → Show/Hide Menu\nF (Hold) → Aimlock\nV → Silent Aim toggle\nB → ESP toggle\nX → Speed Hack toggle\nC → Fly toggle\nN → Noclip toggle\n\nFOV circle follows your mouse."
-        keyLabel.TextColor3 = Color3.new(200,200,220)
-        keyLabel.TextScaled = true
-        keyLabel.TextXAlignment = Enum.TextXAlignment.Left
-        keyLabel.TextYAlignment = Enum.TextYAlignment.Top
-        keyLabel.Font = Enum.Font.Gotham
-        keyLabel.Parent = leftCol
-    end
+-- Заполнение вкладок (создаём один раз)
+local function buildCombat(panel)
+    local left = panel.left
+    local right = panel.right
+    createToggle(left, "Aimlock (Hold F)", 10, function() return settings.aimlock end, function(v) settings.aimlock = v end)
+    createToggle(left, "Silent Aim", 55, function() return settings.silentAim end, function(v) settings.silentAim = v; if v then enableSilentAim() else disableSilentAim() end end)
+    createToggle(left, "Team Check", 100, function() return settings.teamCheck end, function(v) settings.teamCheck = v end)
+    createToggle(left, "Wall Check", 145, function() return settings.wallCheck end, function(v) settings.wallCheck = v end)
+    createDropdown(left, "Aim Part", 200, {"Head", "Torso", "Random"}, function() return settings.aimPart end, function(v) settings.aimPart = v end)
+    createSlider(right, "FOV (pixels)", 10, 30, 400, function() return settings.fov end, function(v) settings.fov = v end)
+    createSlider(right, "Smoothness", 70, 0.1, 1, function() return settings.smoothness end, function(v) settings.smoothness = v end)
 end
 
-populateTab("⚔️ Combat")
+local function buildESP(panel)
+    local left = panel.left
+    local right = panel.right
+    createToggle(left, "Enable ESP", 10, function() return settings.esp end, function(v) settings.esp = v end)
+    createToggle(left, "Show Name", 55, function() return settings.espShowName end, function(v) settings.espShowName = v end)
+    createToggle(left, "Show Health", 100, function() return settings.espShowHealth end, function(v) settings.espShowHealth = v end)
+    createToggle(left, "Show Distance", 145, function() return settings.espShowDistance end, function(v) settings.espShowDistance = v end)
+    createSlider(right, "Max Distance", 10, 50, 800, function() return settings.espMaxDistance end, function(v) settings.espMaxDistance = v end)
+    createSlider(right, "Box Thickness", 70, 1, 5, function() return settings.espBoxThickness end, function(v) settings.espBoxThickness = v end)
+    createColorPicker(right, "Box Color", 130, function() return settings.espBoxColor end, function(v) settings.espBoxColor = v end)
+    createColorPicker(right, "Name Color", 180, function() return settings.espNameColor end, function(v) settings.espNameColor = v end)
+    local boxTypeBtn = Instance.new("TextButton")
+    boxTypeBtn.Size = UDim2.new(0.9, 0, 0, 34)
+    boxTypeBtn.Position = UDim2.new(0, 0, 0, 230)
+    boxTypeBtn.BackgroundColor3 = Color3.fromRGB(50,52,55)
+    boxTypeBtn.Text = "Box Type: " .. settings.espBoxType
+    boxTypeBtn.TextColor3 = Color3.new(1,1,1)
+    boxTypeBtn.Font = Enum.Font.Gotham
+    boxTypeBtn.Parent = right
+    Instance.new("UICorner", boxTypeBtn).CornerRadius = UDim.new(0, 6)
+    boxTypeBtn.MouseButton1Click:Connect(function()
+        local types = {"Square", "Corner", "Glow"}
+        local idx = tableFind(types, settings.espBoxType) or 1
+        idx = idx % 3 + 1
+        settings.espBoxType = types[idx]
+        boxTypeBtn.Text = "Box Type: " .. settings.espBoxType
+    end)
+end
+
+local function buildCharacter(panel)
+    local left = panel.left
+    local right = panel.right
+    createToggle(left, "Speed Hack", 10, function() return settings.speedHack end, function(v) settings.speedHack = v end)
+    createSlider(left, "Speed Multiplier", 65, 1, 10, function() return settings.speedMult end, function(v) settings.speedMult = v end)
+    createToggle(right, "Fly Hack", 10, function() return settings.fly end, function(v) settings.fly = v; if v then enableFly() else disableFly() end end)
+    createSlider(right, "Fly Speed", 65, 10, 200, function() return settings.flySpeed end, function(v) settings.flySpeed = v end)
+    createToggle(right, "Noclip", 130, function() return settings.noclip end, function(v) settings.noclip = v end)
+end
+
+local function buildMisc(panel)
+    local left = panel.left
+    local keyLabel = Instance.new("TextLabel")
+    keyLabel.Size = UDim2.new(0.9, 0, 0, 200)
+    keyLabel.Position = UDim2.new(0, 0, 0, 10)
+    keyLabel.BackgroundTransparency = 1
+    keyLabel.Text = "KEYBINDS\n\nRight Shift  -  Show/Hide Menu\nF (Hold)     -  Aimlock\nV            -  Silent Aim toggle\nB            -  ESP toggle\nX            -  Speed Hack toggle\nC            -  Fly toggle\nN            -  Noclip toggle\n\nFOV circle follows your mouse cursor."
+    keyLabel.TextColor3 = Color3.fromRGB(200,200,220)
+    keyLabel.TextScaled = true
+    keyLabel.TextXAlignment = Enum.TextXAlignment.Left
+    keyLabel.TextYAlignment = Enum.TextYAlignment.Top
+    keyLabel.Font = Enum.Font.Gotham
+    keyLabel.Parent = left
+end
+
+-- Создаём панели для каждой вкладки
+for _, name in ipairs(tabNames) do
+    local panelData = createContentPanel(name)
+    contentFrames[name] = panelData
+    if name == "Combat" then buildCombat(panelData)
+    elseif name == "ESP" then buildESP(panelData)
+    elseif name == "Character" then buildCharacter(panelData)
+    elseif name == "Misc" then buildMisc(panelData) end
+end
+
+-- Создаём вертикальные кнопки вкладок
+for i, name in ipairs(tabNames) do
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -10, 0, 40)
+    btn.Position = UDim2.new(0, 5, 0, 10 + (i-1)*48)
+    btn.BackgroundColor3 = (name == activeTab) and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(30, 32, 35)
+    btn.Text = name
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    btn.MouseButton1Click:Connect(function()
+        activeTab = name
+        for _, b in pairs(tabButtons) do
+            b.BackgroundColor3 = Color3.fromRGB(30, 32, 35)
+        end
+        btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
+        for tab, panelData in pairs(contentFrames) do
+            panelData.panel.Visible = (tab == activeTab)
+        end
+    end)
+    tabButtons[name] = btn
+end
 
 -- ========== KEYBINDS ==========
 userInputService.InputBegan:Connect(function(input, gp)
@@ -741,28 +766,46 @@ userInputService.InputBegan:Connect(function(input, gp)
     elseif k == Enum.KeyCode.V then
         settings.silentAim = not settings.silentAim
         if settings.silentAim then enableSilentAim() else disableSilentAim() end
-        updateToggle("silent", function() return settings.silentAim end)
+        -- обновить кнопку Silent Aim в Combat вкладке (просто пересоздадим панель? нет, лучше найти кнопку)
+        -- но для простоты перестроим только Combat вкладку, если она активна. А можно просто перезаполнить панель.
+        if activeTab == "Combat" then
+            for _, child in ipairs(contentFrames["Combat"].left:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(contentFrames["Combat"].right:GetChildren()) do child:Destroy() end
+            buildCombat(contentFrames["Combat"])
+        end
     elseif k == Enum.KeyCode.B then
         settings.esp = not settings.esp
-        updateToggle("esp", function() return settings.esp end)
+        if activeTab == "ESP" then
+            for _, child in ipairs(contentFrames["ESP"].left:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(contentFrames["ESP"].right:GetChildren()) do child:Destroy() end
+            buildESP(contentFrames["ESP"])
+        end
     elseif k == Enum.KeyCode.X then
         settings.speedHack = not settings.speedHack
         if not settings.speedHack then resetWalkSpeed() end
-        updateToggle("speed", function() return settings.speedHack end)
+        if activeTab == "Character" then
+            for _, child in ipairs(contentFrames["Character"].left:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(contentFrames["Character"].right:GetChildren()) do child:Destroy() end
+            buildCharacter(contentFrames["Character"])
+        end
     elseif k == Enum.KeyCode.C then
         settings.fly = not settings.fly
         if settings.fly then enableFly() else disableFly() end
-        updateToggle("fly", function() return settings.fly end)
+        if activeTab == "Character" then
+            for _, child in ipairs(contentFrames["Character"].left:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(contentFrames["Character"].right:GetChildren()) do child:Destroy() end
+            buildCharacter(contentFrames["Character"])
+        end
     elseif k == Enum.KeyCode.N then
         settings.noclip = not settings.noclip
-        updateToggle("noclip", function() return settings.noclip end)
+        if activeTab == "Character" then
+            for _, child in ipairs(contentFrames["Character"].left:GetChildren()) do child:Destroy() end
+            for _, child in ipairs(contentFrames["Character"].right:GetChildren()) do child:Destroy() end
+            buildCharacter(contentFrames["Character"])
+        end
     end
 end)
 
--- Очистка при выгрузке скрипта
-game.Players.LocalPlayer.CharacterAdded:Connect(function()
-    resetWalkSpeed()
-end)
-
-enableSilentAim()  -- silent aim по умолчанию выключен, но функция готова
-print("✅ Matcha Cheat Menu v7 (Right Shift menu, all bugs fixed) loaded.")
+-- Инициализация
+enableSilentAim()
+print("Matcha Cheat Menu v8 loaded. Right Shift toggles menu.")
