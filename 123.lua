@@ -1,4 +1,4 @@
--- // Hoholware Menu - Исправленная версия
+-- // Hoholware Menu - Финальная чистая версия
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = game:GetService("RunService")
@@ -12,7 +12,8 @@ local godEnabled = false
 local speedMult = 2.8
 local flySpeed = 65
 
-local velocity, gyro = nil, nil
+local velocity = nil
+local gyro = nil
 
 -- ==================== GUI ====================
 local sg = Instance.new("ScreenGui")
@@ -20,8 +21,8 @@ sg.ResetOnSpawn = false
 sg.Parent = player:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 720, 0, 380)
-main.Position = UDim2.new(0.5, -360, 0.5, -190)
+main.Size = UDim2.new(0, 320, 0, 380)
+main.Position = UDim2.new(0.5, -160, 0.5, -190)
 main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 main.Parent = sg
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
@@ -52,50 +53,46 @@ title.InputBegan:Connect(function(inp)
     end
 end)
 
--- Панели
-local movementPanel = Instance.new("Frame")
-movementPanel.Size = UDim2.new(0, 240, 0, 280)
-movementPanel.Position = UDim2.new(0, 240, 0, 70)
-movementPanel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
-movementPanel.Parent = main
-Instance.new("UICorner", movementPanel).CornerRadius = UDim.new(0, 10)
+-- MOVEMENT Панель
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(1, -20, 1, -70)
+panel.Position = UDim2.new(0, 10, 0, 60)
+panel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
+panel.Parent = main
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
 
 local header = Instance.new("TextLabel")
 header.Size = UDim2.new(1,0,0,40)
-header.BackgroundColor3 = Color3.fromRGB(30,30,35)
+header.BackgroundColor3 = Color3.fromRGB(25,25,32)
 header.Text = "MOVEMENT"
 header.TextColor3 = Color3.fromRGB(0, 255, 180)
 header.TextScaled = true
 header.Font = Enum.Font.GothamBold
-header.Parent = movementPanel
+header.Parent = panel
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
--- Функции
+-- Toggle
 local function createToggle(name, y)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.9,0,0,45)
-    btn.Position = UDim2.new(0.05,0,0,y)
+    btn.Size = UDim2.new(0.92,0,0,42)
+    btn.Position = UDim2.new(0.04,0,0,y)
     btn.BackgroundColor3 = Color3.fromRGB(30,30,35)
     btn.Text = name .. " : OFF"
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
     btn.Font = Enum.Font.GothamSemibold
-    btn.Parent = movementPanel
+    btn.Parent = panel
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
 
     btn.MouseButton1Click:Connect(function()
-        if name == "Speed Hack" then 
-            speedEnabled = not speedEnabled
-        elseif name == "Fly Hack" then 
-            flyEnabled = not flyEnabled
-        elseif name == "Noclip" then 
-            noclipEnabled = not noclipEnabled
-        elseif name == "Godmode" then 
-            godEnabled = not godEnabled
+        if name == "Speed Hack" then speedEnabled = not speedEnabled
+        elseif name == "Fly Hack" then flyEnabled = not flyEnabled
+        elseif name == "Noclip" then noclipEnabled = not noclipEnabled
+        elseif name == "Godmode" then godEnabled = not godEnabled
         end
         
         btn.Text = name .. " : " .. (btn.Text:find("OFF") and "ON" or "OFF")
-        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(30,30,35)
+        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0,200,100) or Color3.fromRGB(30,30,35)
     end)
 end
 
@@ -107,10 +104,10 @@ createToggle("Godmode", 215)
 -- Ползунки
 local function createSlider(name, minv, maxv, default, y, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.9,0,0,50)
-    frame.Position = UDim2.new(0.05,0,0,y)
+    frame.Size = UDim2.new(0.92,0,0,50)
+    frame.Position = UDim2.new(0.04,0,0,y)
     frame.BackgroundTransparency = 1
-    frame.Parent = movementPanel
+    frame.Parent = panel
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,0,0,20)
@@ -155,7 +152,7 @@ end
 createSlider("Speed", 1, 6, speedMult, 100, function(v) speedMult = v end)
 createSlider("Fly", 30, 150, flySpeed, 170, function(v) flySpeed = v end)
 
--- Логика (основные функции)
+-- Логика
 rs.Heartbeat:Connect(function()
     if player.Character and player.Character:FindFirstChild("Humanoid") then
         player.Character.Humanoid.WalkSpeed = speedEnabled and 16 * speedMult or 16
@@ -173,7 +170,6 @@ rs.RenderStepped:Connect(function()
             velocity.Parent = root
             gyro.Parent = root
         end
-        
         local move = Vector3.new()
         if uis:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
         if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
