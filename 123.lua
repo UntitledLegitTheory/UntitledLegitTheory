@@ -1,11 +1,10 @@
--- // Advanced Cheat Menu v4 - Mouse Aimlock, Magic Bullet, Side Healthbar
+-- // Advanced Cheat Menu v5 - Mouse Aimlock + Body Part Select + FOV on Cursor
 local player = game.Players.LocalPlayer
 local mouse = player:GetMouse()
 local camera = workspace.CurrentCamera
 local runService = game:GetService("RunService")
 local userInputService = game:GetService("UserInputService")
 local players = game:GetService("Players")
-local http = game:GetService("HttpService")
 
 -- ========== НАСТРОЙКИ ==========
 local settings = {
@@ -17,22 +16,22 @@ local settings = {
     noclip = false,
     -- параметры
     fov = 120,
-    smoothness = 0.3,        -- для mouse aimlock (скорость перемещения)
-    aimlockKey = "F",        -- клавиша для удержания аимлока
-    wallCheck = true,        -- проверка видимости
+    smoothness = 0.3,
+    aimlockKey = "F",
+    aimPart = "Head",        -- "Head", "Torso", "Random"
+    wallCheck = true,
     teamCheck = true,
-    -- speed/fly
     speedMult = 2,
     flySpeed = 50,
     -- ESP
     espBoxColor = Color3.fromRGB(255, 80, 80),
     espBoxThickness = 2,
-    espBoxType = "Square",   -- "Square", "Corner", "Glow"
+    espBoxType = "Square",
     espShowName = true,
     espShowHealth = true,
     espShowDistance = false,
     espMaxDistance = 350,
-    espHealthBarPosition = "Side",  -- "Side" или "Top"
+    espHealthBarPosition = "Side",
     espHealthBarWidth = 4,
     espHealthBarColor = Color3.fromRGB(0, 255, 0),
     espOutline = true,
@@ -46,10 +45,10 @@ local bodyVelocity, bodyGyro = nil, nil
 local originalWalkSpeed = 16
 local originalGravity = nil
 local flyActive = false
-local espObjects = {}  -- [player] = {box, name, healthBar, healthBarBG, distanceText}
+local espObjects = {}  -- [player] = {box, name, healthBar, healthBarBG, distanceText, mainBox}
 local drawingAvailable = pcall(function() return Drawing.new("Square") end)
 
--- FOV круг (если доступен)
+-- FOV круг (рисуется вокруг курсора)
 local fovCircle = drawingAvailable and Drawing.new("Circle") or nil
 if fovCircle then
     fovCircle.Thickness = 2
@@ -60,12 +59,38 @@ if fovCircle then
     fovCircle.Visible = false
 end
 
--- ========== ФУНКЦИЯ ПРОВЕРКИ ВИДИМОСТИ ==========
+-- ========== ФУНКЦИЯ ПОЛУЧЕНИЯ ПОЗИЦИИ ЧАСТИ ТЕЛА ==========
+local function getAimPosition(character)
+    if not character then return nil end
+    local part = nil
+    if settings.aimPart == "Head" then
+        part = character:FindFirstChild("Head")
+    elseif settings.aimPart == "Torso" then
+        part = character:FindFirstChild("UpperTorso") or character:FindFirstChild("HumanoidRootPart")
+    elseif settings.aimPart == "Random" then
+        local parts = {"Head", "UpperTorso", "LowerTorso", "HumanoidRootPart", "LeftArm", "RightArm"}
+        local validParts = {}
+        for _, p in ipairs(parts) do
+            local found = character:FindFirstChild(p)
+            if found then table.insert(validParts, found) end
+        end
+        if #validParts > 0 then
+            part = validParts[math.random(1, #validParts)]
+        end
+    end
+    if not part then
+        part = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
+    end
+    return part and part.Position
+end
+
+-- ========== ПРОВЕРКА ВИДИМОСТИ ==========
 local function isVisible(part)
+    if not part then return false end
     local origin = camera.CFrame.Position
     local direction = (part.Position - origin).Unit
     local ray = Ray.new(origin, direction * (part.Position - origin).Magnitude)
-    local hit, hitPos = workspace:FindPartOnRay(ray, player.Character)
+    local hit = workspace:FindPartOnRay(ray, player.Character)
     if hit then
         local hitPart = hit
         if hitPart:IsDescendantOf(part.Parent) then return true end
@@ -74,21 +99,29 @@ local function isVisible(part)
     return true
 end
 
--- ========== ПОЛУЧЕНИЕ БЛИЖАЙШЕЙ ЦЕЛИ (С УЧЁТОМ WALLCHECK) ==========
-local function getNearestTarget()
+-- ========== ПОЛУЧЕНИЕ БЛИЖАЙШЕЙ ЦЕЛИ (УЧЁТ FOV ОТ КУРСОРА) ==========
+local function getNearestTargetFromCursor()
     local nearest, shortest = nil, settings.fov
+    local cursorPos = Vector2.new(mouse.X, mouse.Y)
+    
     for _, plr in ipairs(players:GetPlayers()) do
-        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        if plr ~= player and plr.Character then
             local hum = plr.Character:FindFirstChild("Humanoid")
             if hum and hum.Health > 0 then
                 if settings.teamCheck and plr.Team == player.Team then continue end
-                local root = plr.Character.HumanoidRootPart
-                local vector = (root.Position - camera.CFrame.Position)
-                local angle = math.acos(camera.CFrame.LookVector:Dot(vector.Unit)) * (180 / math.pi)
-                if angle < shortest then
-                    if settings.wallCheck and not isVisible(root) then continue end
-                    shortest = angle
-                    nearest = root
+                local aimPos = getAimPosition(plr.Character)
+                if not aimPos then continue end
+                local screenPos, onScreen = camera:WorldToViewportPoint(aimPos)
+                if onScreen then
+                    local distance = (Vector2.new(screenPos.X, screenPos.Y) - cursorPos).Magnitude
+                    if distance < shortest then
+                        if settings.wallCheck then
+                            local part = plr.Character:FindFirstChild(settings.aimPart == "Head" and "Head" or "HumanoidRootPart")
+                            if not isVisible(part) then continue end
+                        end
+                        shortest = distance
+                        nearest = {plr = plr, position = aimPos, part = plr.Character:FindFirstChild(settings.aimPart == "Head" and "Head" or "HumanoidRootPart")}
+                    end
                 end
             end
         end
@@ -96,44 +129,44 @@ local function getNearestTarget()
     return nearest
 end
 
--- ========== AIMLOCK ЧЕРЕЗ МЫШЬ ==========
-local function moveMouseToTarget(targetRoot)
-    if not targetRoot or not targetRoot.Parent then return end
-    local targetPos = targetRoot.Position + Vector3.new(0, 2.5, 0)
-    local screenPos, onScreen = camera:WorldToViewportPoint(targetPos)
+-- ========== AIMLOCK ЧЕРЕЗ МЫШЬ (С ПОДДЕРЖКОЙ mousemoverel) ==========
+local function moveMouseToTarget(targetInfo)
+    if not targetInfo or not targetInfo.position then return end
+    local screenPos, onScreen = camera:WorldToViewportPoint(targetInfo.position)
     if onScreen then
         local currentPos = Vector2.new(mouse.X, mouse.Y)
         local targetPos2D = Vector2.new(screenPos.X, screenPos.Y)
         local delta = targetPos2D - currentPos
-        if delta.Magnitude > 1 then
+        if delta.Magnitude > 1 and mousemoverel then
             mousemoverel(delta.X, delta.Y)
         end
     end
 end
 
--- Основной цикл аимлока (через RenderStepped, но не меняем CFrame камеры)
+-- Основной цикл аимлока (с FOV вокруг мыши)
 runService.RenderStepped:Connect(function()
-    -- Обновляем FOV круг
+    -- Обновляем FOV круг (позиция = курсор)
     if fovCircle then
         fovCircle.Visible = (settings.aimlock or settings.silentAim) and camera.ViewportSize.X > 0
         if fovCircle.Visible then
-            fovCircle.Radius = settings.fov * 3.2
-            fovCircle.Position = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+            fovCircle.Radius = settings.fov * 2.5  -- примерный коэф. для удобства
+            fovCircle.Position = Vector2.new(mouse.X, mouse.Y)
         end
     end
-    -- Аимлок по зажатой клавише (удержание)
+    
+    -- Аимлок по зажатой клавише
     if settings.aimlock and userInputService:IsKeyDown(Enum.KeyCode[settings.aimlockKey]) then
-        local target = getNearestTarget()
-        if target then
-            moveMouseToTarget(target)
-            aimlockTarget = target
+        local targetInfo = getNearestTargetFromCursor()
+        if targetInfo then
+            moveMouseToTarget(targetInfo)
+            aimlockTarget = targetInfo
         end
     else
         aimlockTarget = nil
     end
 end)
 
--- ========== SILENT AIM / MAGIC BULLET ==========
+-- ========== SILENT AIM / MAGIC BULLET (С УЧЁТОМ ЧАСТИ ТЕЛА) ==========
 local oldNamecall, mt
 local function enableSilentAim()
     if silentActive or not getrawmetatable then return end
@@ -145,16 +178,16 @@ local function enableSilentAim()
         local method = getnamecallmethod()
         local args = {...}
         if method == "FireServer" and settings.silentAim then
-            local targetRoot = getNearestTarget()
-            if targetRoot then
-                local targetPos = targetRoot.Position + Vector3.new(0, 2.5, 0)
-                -- Подмена позиции (для большинства орудий)
+            local targetInfo = getNearestTargetFromCursor()
+            if targetInfo and targetInfo.position then
+                local targetPos = targetInfo.position
+                -- Подмена позиции
                 if type(args[1]) == "Vector3" then
                     args[1] = targetPos
                 elseif type(args[2]) == "Vector3" then
                     args[2] = targetPos
                 end
-                -- Доп. проверка для направления (magic bullet)
+                -- Подмена CFrame (для орудий с направлением)
                 if type(args[1]) == "CFrame" then
                     args[1] = CFrame.new(args[1].Position, targetPos)
                 elseif type(args[2]) == "CFrame" then
@@ -180,7 +213,7 @@ local function updateSilentAim()
     if settings.silentAim then enableSilentAim() else disableSilentAim() end
 end
 
--- ========== ESP С БОКОВОЙ ПОЛОСКОЙ ЗДОРОВЬЯ ==========
+-- ========== ESP С БОКОВОЙ ПОЛОСКОЙ ЗДОРОВЬЯ (ИСПРАВЛЕННЫЙ) ==========
 local function updateESP()
     if not drawingAvailable or not settings.esp then
         for _, v in pairs(espObjects) do
@@ -189,6 +222,7 @@ local function updateESP()
             if v.healthBar then v.healthBar.Visible = false end
             if v.healthBarBG then v.healthBarBG.Visible = false end
             if v.distanceText then v.distanceText.Visible = false end
+            if v.mainBox then v.mainBox.Visible = false end
         end
         return
     end
@@ -199,7 +233,7 @@ local function updateESP()
             if drawings.name then drawings.name.Visible = false end
             if drawings.healthBar then drawings.healthBar.Visible = false end
             if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.distanceText then drawings.distanceText.Visible = false end
+            if drawings.mainBox then drawings.mainBox.Visible = false end
             continue
         end
         local root = plr.Character:FindFirstChild("HumanoidRootPart")
@@ -209,7 +243,7 @@ local function updateESP()
             if drawings.name then drawings.name.Visible = false end
             if drawings.healthBar then drawings.healthBar.Visible = false end
             if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.distanceText then drawings.distanceText.Visible = false end
+            if drawings.mainBox then drawings.mainBox.Visible = false end
             continue
         end
 
@@ -219,7 +253,7 @@ local function updateESP()
             if drawings.name then drawings.name.Visible = false end
             if drawings.healthBar then drawings.healthBar.Visible = false end
             if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.distanceText then drawings.distanceText.Visible = false end
+            if drawings.mainBox then drawings.mainBox.Visible = false end
             continue
         end
 
@@ -233,38 +267,36 @@ local function updateESP()
                 local boxHeight = height
                 local boxPos = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2)
                 
-                -- Рендер бокса (Square, Corner или Glow)
+                -- Отрисовка бокса
                 if settings.espBoxType == "Square" then
                     drawings.box.Size = Vector2.new(boxWidth, boxHeight)
                     drawings.box.Position = boxPos
                     drawings.box.Visible = true
-                elseif settings.espBoxType == "Corner" then
-                    -- Рисуем уголки (можно 4 линии, но для простоты используем квадрат с прозрачностью)
-                    drawings.box.Size = Vector2.new(boxWidth, boxHeight)
-                    drawings.box.Position = boxPos
-                    drawings.box.Visible = true
-                    -- Здесь можно добавить отдельные линии, но для краткости оставим как есть
-                else -- Glow
-                    drawings.box.Size = Vector2.new(boxWidth+4, boxHeight+4)
-                    drawings.box.Position = Vector2.new(boxPos.X-2, boxPos.Y-2)
-                    drawings.box.Thickness = settings.espBoxThickness + 2
-                    drawings.box.Color = Color3.fromRGB(255,255,255)
-                    drawings.box.Visible = true
-                    -- основной бокс поверх
-                    local mainBox = drawings.mainBox or drawings.box
+                    if drawings.mainBox then drawings.mainBox.Visible = false end
+                elseif settings.espBoxType == "Glow" then
                     if not drawings.mainBox then
-                        mainBox = Drawing.new("Square")
+                        local mainBox = Drawing.new("Square")
                         mainBox.Thickness = settings.espBoxThickness
                         mainBox.Color = settings.espBoxColor
                         mainBox.Filled = false
                         drawings.mainBox = mainBox
                     end
-                    mainBox.Size = Vector2.new(boxWidth, boxHeight)
-                    mainBox.Position = boxPos
-                    mainBox.Visible = true
+                    drawings.box.Size = Vector2.new(boxWidth+4, boxHeight+4)
+                    drawings.box.Position = Vector2.new(boxPos.X-2, boxPos.Y-2)
+                    drawings.box.Thickness = settings.espBoxThickness + 2
+                    drawings.box.Color = Color3.fromRGB(255,255,255)
+                    drawings.box.Visible = true
+                    drawings.mainBox.Size = Vector2.new(boxWidth, boxHeight)
+                    drawings.mainBox.Position = boxPos
+                    drawings.mainBox.Visible = true
+                else -- Corner (используем обычный квадрат, но можно доработать)
+                    drawings.box.Size = Vector2.new(boxWidth, boxHeight)
+                    drawings.box.Position = boxPos
+                    drawings.box.Visible = true
+                    if drawings.mainBox then drawings.mainBox.Visible = false end
                 end
 
-                -- Имя и дистанция
+                -- Имя, здоровье, дистанция
                 local text = ""
                 if settings.espShowName then text = plr.Name end
                 if settings.espShowDistance then text = text .. " [" .. math.floor(distance) .. "m]" end
@@ -274,10 +306,10 @@ local function updateESP()
                 drawings.name.Visible = true
                 drawings.name.Color = settings.espNameColor
                 drawings.name.Size = 14
+                drawings.name.Outline = settings.espOutline
 
                 -- Полоска здоровья (сбоку или сверху)
                 if settings.espHealthBarPosition == "Side" then
-                    -- Вертикальная полоска слева от бокса
                     local barWidth = settings.espHealthBarWidth
                     local healthPercent = hum.Health / hum.MaxHealth
                     local barHeight = boxHeight * healthPercent
@@ -330,12 +362,14 @@ local function updateESP()
                 drawings.name.Visible = false
                 if drawings.healthBar then drawings.healthBar.Visible = false end
                 if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
+                if drawings.mainBox then drawings.mainBox.Visible = false end
             end
         else
             drawings.box.Visible = false
             drawings.name.Visible = false
             if drawings.healthBar then drawings.healthBar.Visible = false end
             if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
+            if drawings.mainBox then drawings.mainBox.Visible = false end
         end
     end
 end
@@ -371,10 +405,10 @@ end)
 for _, plr in ipairs(players:GetPlayers()) do createESP(plr) end
 players.PlayerAdded:Connect(createESP)
 
--- Обновление ESP
+-- Запуск обновления ESP
 runService.RenderStepped:Connect(updateESP)
 
--- ========== SPEED HACK, FLY, NOCLIP (как в предыдущей версии) ==========
+-- ========== SPEED HACK, FLY, NOCLIP (без изменений, стабильно) ==========
 local function resetWalkSpeed()
     if player.Character and player.Character:FindFirstChild("Humanoid") then
         player.Character.Humanoid.WalkSpeed = originalWalkSpeed
@@ -448,27 +482,25 @@ player.CharacterAdded:Connect(function()
     if settings.fly then task.wait(0.5); enableFly() end
 end)
 
--- ========== НОВОЕ СТИЛЬНОЕ МЕНЮ (НЕ БЛОКСИ, МИНИМАЛИЗМ) ==========
+-- ========== НОВОЕ МЕНЮ С ВЫБОРОМ ЧАСТИ ТЕЛА ==========
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CheatMenu"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 520, 0, 420)
-mainFrame.Position = UDim2.new(0.5, -260, 0.5, -210)
+mainFrame.Size = UDim2.new(0, 540, 0, 480)
+mainFrame.Position = UDim2.new(0.5, -270, 0.5, -240)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-mainFrame.BackgroundTransparency = 0.1
+mainFrame.BackgroundTransparency = 0.15
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
 mainFrame.Draggable = true
 mainFrame.Parent = screenGui
--- Размытие (если поддерживается)
-pcall(function() mainFrame.BackgroundTransparency = 0.3 end)
 local corner = Instance.new("UICorner", mainFrame)
 corner.CornerRadius = UDim.new(0, 12)
+pcall(function() mainFrame.BackgroundTransparency = 0.3 end)
 
--- Заголовок минималистичный
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1, 0, 0, 40)
 title.BackgroundTransparency = 1
@@ -478,7 +510,7 @@ title.TextScaled = true
 title.Font = Enum.Font.Gotham
 title.Parent = mainFrame
 
--- Табы (горизонтальные, как в современных программах)
+-- Табы
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, 0, 0, 36)
 tabBar.Position = UDim2.new(0, 0, 0, 40)
@@ -496,8 +528,8 @@ contentFrame.Parent = mainFrame
 
 for i, name in ipairs(tabs) do
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 100, 1, 0)
-    btn.Position = UDim2.new(0, (i-1)*105, 0, 0)
+    btn.Size = UDim2.new(0, 110, 1, 0)
+    btn.Position = UDim2.new(0, (i-1)*115, 0, 0)
     btn.BackgroundTransparency = 1
     btn.Text = name
     btn.TextColor3 = Color3.fromRGB(200, 200, 220)
@@ -515,13 +547,13 @@ for i, name in ipairs(tabs) do
 end
 tabButtons["⚔️ Combat"].TextColor3 = Color3.fromRGB(0, 255, 180)
 
--- Вспомогательные функции для построения UI
+-- Вспомогательные функции UI
 local function createToggle(parent, text, y, getter, setter)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.45, 0, 0, 32)
     btn.Position = UDim2.new(0, 0, 0, y)
     btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(60, 60, 70)
-    btn.Text = text .. (getter() and " ✓" or "")
+    btn.Text = text .. (getter() and " ✓" : "")
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
     btn.Font = Enum.Font.Gotham
@@ -530,7 +562,7 @@ local function createToggle(parent, text, y, getter, setter)
     btn.MouseButton1Click:Connect(function()
         setter(not getter())
         btn.BackgroundColor3 = getter() and Color3.fromRGB(80, 200, 120) or Color3.fromRGB(60, 60, 70)
-        btn.Text = text .. (getter() and " ✓" or "")
+        btn.Text = text .. (getter() and " ✓" : "")
         if text:find("Silent") then updateSilentAim() end
         if text:find("Fly") then if getter() then enableFly() else disableFly() end end
         if text:find("Speed") and not getter() then resetWalkSpeed() end
@@ -623,14 +655,78 @@ local function createColorPicker(parent, name, y, getter, setter)
     end)
 end
 
+local function createDropdown(parent, name, y, options, getter, setter)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.9, 0, 0, 50)
+    frame.Position = UDim2.new(0, 0, 0, y)
+    frame.BackgroundTransparency = 1
+    frame.Parent = parent
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.5, 0, 0, 20)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextScaled = true
+    label.Font = Enum.Font.Gotham
+    label.Parent = frame
+
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.45, 0, 0, 32)
+    btn.Position = UDim2.new(0.5, 0, 0, 0)
+    btn.BackgroundColor3 = Color3.fromRGB(60,60,70)
+    btn.Text = getter()
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = frame
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+
+    btn.MouseButton1Click:Connect(function()
+        local dropdownFrame = Instance.new("Frame")
+        dropdownFrame.Size = UDim2.new(0, 150, 0, #options * 32)
+        dropdownFrame.Position = UDim2.new(0, btn.AbsolutePosition.X - frame.AbsolutePosition.X, 0, 32)
+        dropdownFrame.BackgroundColor3 = Color3.fromRGB(40,40,45)
+        dropdownFrame.Parent = frame
+        Instance.new("UICorner", dropdownFrame).CornerRadius = UDim.new(0, 6)
+        for i, opt in ipairs(options) do
+            local optBtn = Instance.new("TextButton")
+            optBtn.Size = UDim2.new(1, 0, 0, 30)
+            optBtn.Position = UDim2.new(0, 0, 0, (i-1)*30)
+            optBtn.BackgroundTransparency = 1
+            optBtn.Text = opt
+            optBtn.TextColor3 = Color3.new(1,1,1)
+            optBtn.TextScaled = true
+            optBtn.Font = Enum.Font.Gotham
+            optBtn.Parent = dropdownFrame
+            optBtn.MouseButton1Click:Connect(function()
+                setter(opt)
+                btn.Text = opt
+                dropdownFrame:Destroy()
+            end)
+        end
+        -- Закрыть при клике вне
+        local function closeOnClick(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                if not dropdownFrame:IsAncestorOf(input.Origin) and dropdownFrame.Parent then
+                    dropdownFrame:Destroy()
+                    userInputService.InputBegan:Disconnect(closeConn)
+                end
+            end
+        end
+        local closeConn = userInputService.InputBegan:Connect(closeOnClick)
+    end)
+end
+
 function populateTab(tab)
     if tab == "⚔️ Combat" then
         createToggle(contentFrame, "Aimlock (Hold F)", 10, function() return settings.aimlock end, function(v) settings.aimlock = v end)
         createToggle(contentFrame, "Silent Aim", 55, function() return settings.silentAim end, function(v) settings.silentAim = v; updateSilentAim() end)
         createToggle(contentFrame, "Team Check", 100, function() return settings.teamCheck end, function(v) settings.teamCheck = v end)
         createToggle(contentFrame, "Wall Check", 145, function() return settings.wallCheck end, function(v) settings.wallCheck = v end)
-        createSlider(contentFrame, "FOV", 200, 20, 360, function() return settings.fov end, function(v) settings.fov = v end)
-        createSlider(contentFrame, "Smoothness", 260, 0.1, 1, function() return settings.smoothness end, function(v) settings.smoothness = v end)
+        createDropdown(contentFrame, "Aim Part", 200, {"Head", "Torso", "Random"}, function() return settings.aimPart end, function(v) settings.aimPart = v end)
+        createSlider(contentFrame, "FOV (pixels)", 270, 30, 400, function() return settings.fov end, function(v) settings.fov = v end)
+        createSlider(contentFrame, "Smoothness", 330, 0.1, 1, function() return settings.smoothness end, function(v) settings.smoothness = v end)
     elseif tab == "👁️ ESP" then
         createToggle(contentFrame, "Enable ESP", 10, function() return settings.esp end, function(v) settings.esp = v end)
         createToggle(contentFrame, "Show Name", 55, function() return settings.espShowName end, function(v) settings.espShowName = v end)
@@ -640,7 +736,6 @@ function populateTab(tab)
         createSlider(contentFrame, "Box Thickness", 260, 1, 5, function() return settings.espBoxThickness end, function(v) settings.espBoxThickness = v end)
         createColorPicker(contentFrame, "Box Color", 320, function() return settings.espBoxColor end, function(v) settings.espBoxColor = v end)
         createColorPicker(contentFrame, "Name Color", 370, function() return settings.espNameColor end, function(v) settings.espNameColor = v end)
-        -- Тип бокса (выбор)
         local boxTypeBtn = Instance.new("TextButton")
         boxTypeBtn.Size = UDim2.new(0.45, 0, 0, 32)
         boxTypeBtn.Position = UDim2.new(0, 0, 0, 420)
@@ -664,10 +759,10 @@ function populateTab(tab)
         createToggle(contentFrame, "Noclip", 260, function() return settings.noclip end, function(v) settings.noclip = v end)
     elseif tab == "⚙️ Misc" then
         local keyLabel = Instance.new("TextLabel")
-        keyLabel.Size = UDim2.new(1, 0, 0, 160)
+        keyLabel.Size = UDim2.new(1, 0, 0, 180)
         keyLabel.Position = UDim2.new(0, 0, 0, 10)
         keyLabel.BackgroundTransparency = 1
-        keyLabel.Text = "⌨️  KEYBINDS\n\nInsert → Show/Hide Menu\nF (Hold) → Aimlock\nV → Silent Aim toggle\nB → ESP toggle\nX → Speed Hack toggle\nC → Fly toggle\nN → Noclip toggle"
+        keyLabel.Text = "⌨️  KEYBINDS\n\nInsert → Show/Hide Menu\nF (Hold) → Aimlock\nV → Silent Aim toggle\nB → ESP toggle\nX → Speed Hack toggle\nC → Fly toggle\nN → Noclip toggle\n\nFOV circle follows your mouse cursor."
         keyLabel.TextColor3 = Color3.new(200,200,220)
         keyLabel.TextScaled = true
         keyLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -688,7 +783,7 @@ userInputService.InputBegan:Connect(function(input, gp)
     elseif k == Enum.KeyCode.V then
         settings.silentAim = not settings.silentAim
         updateSilentAim()
-        populateTab(activeTab)
+        populateTab(activeTab)  -- обновить UI
     elseif k == Enum.KeyCode.B then
         settings.esp = not settings.esp
         populateTab(activeTab)
@@ -708,4 +803,4 @@ end)
 
 -- Инициализация
 updateSilentAim()
-print("✅ Cheat Menu v4 (Mouse Aimlock + Magic Bullet) загружен. Insert - меню.")
+print("✅ Cheat Menu v5 (FOV on cursor + Body part select) загружен. Insert - меню.")
