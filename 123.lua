@@ -1,4 +1,4 @@
--- // Hoholware Menu - Горизонтальный Redline Style
+-- // Hoholware Menu - Исправленная версия
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = game:GetService("RunService")
@@ -29,7 +29,7 @@ Instance.new("UICorner", main).CornerRadius = UDim.new(0, 10)
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1,0,0,45)
 title.BackgroundTransparency = 1
-title.Text = "HOHOLWARE"          -- ← Изменено
+title.Text = "HOHOLWARE"
 title.TextColor3 = Color3.fromRGB(0, 255, 200)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBlack
@@ -52,68 +52,66 @@ title.InputBegan:Connect(function(inp)
     end
 end)
 
--- Создание панелей
-local function createPanel(name, posX)
-    local panel = Instance.new("Frame")
-    panel.Size = UDim2.new(0, 240, 0, 300)
-    panel.Position = UDim2.new(0, posX, 0, 55)
-    panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-    panel.Parent = main
-    Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+-- Панели
+local function createPanel(name, x)
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(0, 240, 0, 300)
+    p.Position = UDim2.new(0, x, 0, 55)
+    p.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+    p.Parent = main
+    Instance.new("UICorner", p).CornerRadius = UDim.new(0, 8)
 
-    local header = Instance.new("TextLabel")
-    header.Size = UDim2.new(1,0,0,32)
-    header.BackgroundColor3 = Color3.fromRGB(25,25,32)
-    header.Text = name
-    header.TextColor3 = Color3.fromRGB(0, 255, 200)
-    header.TextScaled = true
-    header.Font = Enum.Font.GothamBold
-    header.Parent = panel
-    Instance.new("UICorner", header).CornerRadius = UDim.new(0, 8)
-
-    return panel
+    local h = Instance.new("TextLabel")
+    h.Size = UDim2.new(1,0,0,32)
+    h.BackgroundColor3 = Color3.fromRGB(25,25,32)
+    h.Text = name
+    h.TextColor3 = Color3.fromRGB(0, 255, 200)
+    h.TextScaled = true
+    h.Font = Enum.Font.GothamBold
+    h.Parent = p
+    Instance.new("UICorner", h).CornerRadius = UDim.new(0, 8)
+    return p
 end
 
-local combatPanel = createPanel("COMBAT", 20)
 local movementPanel = createPanel("MOVEMENT", 270)
-local miscPanel = createPanel("MISC", 520)
 
--- Toggle функция
-local function createToggle(panel, name, y)
-    local toggle = Instance.new("TextButton")
-    toggle.Size = UDim2.new(0.9,0,0,45)
-    toggle.Position = UDim2.new(0.05,0,0,y)
-    toggle.BackgroundColor3 = Color3.fromRGB(30,30,35)
-    toggle.Text = name .. " : OFF"
-    toggle.TextColor3 = Color3.new(1,1,1)
-    toggle.TextScaled = true
-    toggle.Font = Enum.Font.GothamSemibold
-    toggle.Parent = panel
-    Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
+-- Toggle
+local function createToggle(name, y)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0.9,0,0,45)
+    btn.Position = UDim2.new(0.05,0,0,y)
+    btn.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    btn.Text = name .. " : OFF"
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamSemibold
+    btn.Parent = movementPanel
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
 
-    toggle.MouseButton1Click:Connect(function()
+    btn.MouseButton1Click:Connect(function()
         if name == "Speed Hack" then speedEnabled = not speedEnabled
         elseif name == "Fly Hack" then flyEnabled = not flyEnabled
         elseif name == "Noclip" then noclipEnabled = not noclipEnabled
         elseif name == "Godmode" then godEnabled = not godEnabled
         end
-        toggle.Text = name .. " : " .. (toggle.Text:find("OFF") and "ON" or "OFF")
-        toggle.BackgroundColor3 = toggle.Text:find("ON") and Color3.fromRGB(0, 200, 100) or Color3.fromRGB(30,30,35)
+        
+        btn.Text = name .. " : " .. (btn.Text:find("OFF") and "ON" or "OFF")
+        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0,200,100) or Color3.fromRGB(30,30,35)
     end)
 end
 
-createToggle(movementPanel, "Speed Hack", 45)
-createToggle(movementPanel, "Fly Hack", 105)
-createToggle(movementPanel, "Noclip", 165)
-createToggle(movementPanel, "Godmode", 225)
+createToggle("Speed Hack", 45)
+createToggle("Fly Hack", 105)
+createToggle("Noclip", 165)
+createToggle("Godmode", 225)
 
--- Ползунки
-local function createSlider(panel, name, minv, maxv, default, y, callback)
+-- Ползунки (исправленные)
+local function createSlider(name, minv, maxv, default, y, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.9,0,0,50)
+    frame.Size = UDim2.new(0.9,0,0,55)
     frame.Position = UDim2.new(0.05,0,0,y)
     frame.BackgroundTransparency = 1
-    frame.Parent = panel
+    frame.Parent = movementPanel
 
     local label = Instance.new("TextLabel")
     label.Size = UDim2.new(1,0,0,20)
@@ -125,8 +123,8 @@ local function createSlider(panel, name, minv, maxv, default, y, callback)
     label.Parent = frame
 
     local bar = Instance.new("Frame")
-    bar.Size = UDim2.new(1,0,0,6)
-    bar.Position = UDim2.new(0,0,0,30)
+    bar.Size = UDim2.new(1,0,0,8)
+    bar.Position = UDim2.new(0,0,0,32)
     bar.BackgroundColor3 = Color3.fromRGB(40,40,45)
     bar.Parent = frame
     Instance.new("UICorner", bar).CornerRadius = UDim.new(1,0)
@@ -155,14 +153,64 @@ local function createSlider(panel, name, minv, maxv, default, y, callback)
     end)
 end
 
-createSlider(movementPanel, "Speed", 1, 6, speedMult, 100, function(v) speedMult = v end)
-createSlider(movementPanel, "Fly", 30, 150, flySpeed, 160, function(v) flySpeed = v end)
+createSlider("Speed", 1, 6, speedMult, 100, function(v) speedMult = v end)
+createSlider("Fly", 30, 150, flySpeed, 170, function(v) flySpeed = v end)
 
--- Insert
+-- Логика
+rs.Heartbeat:Connect(function()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = speedEnabled and 16 * speedMult or 16
+    end
+end)
+
+rs.RenderStepped:Connect(function()
+    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if flyEnabled and root then
+        if not velocity then
+            velocity = Instance.new("BodyVelocity")
+            gyro = Instance.new("BodyGyro")
+            velocity.MaxForce = Vector3.new(9e9,9e9,9e9)
+            gyro.MaxTorque = Vector3.new(9e9,9e9,9e9)
+            velocity.Parent = root
+            gyro.Parent = root
+        end
+        local move = Vector3.new()
+        if uis:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+
+        velocity.Velocity = move.Unit * flySpeed
+        gyro.CFrame = camera.CFrame
+    elseif velocity then
+        velocity:Destroy()
+        gyro:Destroy()
+        velocity, gyro = nil, nil
+    end
+end)
+
+rs.Stepped:Connect(function()
+    if noclipEnabled and player.Character then
+        for _, part in ipairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then part.CanCollide = false end
+        end
+    end
+end)
+
+rs.Heartbeat:Connect(function()
+    if godEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then
+        local h = player.Character.Humanoid
+        h.MaxHealth = 9e9
+        h.Health = 9e9
+    end
+end)
+
 uis.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Insert then
         main.Visible = not main.Visible
     end
 end)
 
-print("✅ Hoholware Menu загружено!")
+print("✅ Hoholware Menu исправлен!")
