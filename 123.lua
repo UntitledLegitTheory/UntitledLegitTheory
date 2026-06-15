@@ -1,19 +1,19 @@
--- // Matcha Menu - Исправленный Fly + Speed + Слайдеры
+-- // Matcha Menu v2 - Широкое и Компактное
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = game:GetService("RunService")
 local uis = game:GetService("UserInputService")
 
+-- Настройки
 local speedEnabled = false
 local flyEnabled = false
 local noclipEnabled = false
 local godEnabled = false
 
-local speedMult = 2.5
-local flySpeed = 60
+local speedMult = 2.8
+local flySpeed = 65
 
-local velocity = nil
-local gyro = nil
+local velocity, gyro = nil, nil
 
 -- ==================== GUI ====================
 local sg = Instance.new("ScreenGui")
@@ -21,20 +21,136 @@ sg.ResetOnSpawn = false
 sg.Parent = player:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 400, 0, 580)
-main.Position = UDim2.new(0.5, -200, 0.5, -290)
-main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+main.Size = UDim2.new(0, 560, 0, 420)  -- ← Шире и ниже
+main.Position = UDim2.new(0.5, -280, 0.5, -210)
+main.BackgroundColor3 = Color3.fromRGB(18, 18, 23)
 main.Parent = sg
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+
+-- Sidebar (вкладки)
+local sidebar = Instance.new("Frame")
+sidebar.Size = UDim2.new(0, 150, 1, 0)  -- чуть шире
+sidebar.BackgroundColor3 = Color3.fromRGB(13, 13, 18)
+sidebar.Parent = main
+Instance.new("UICorner", sidebar).CornerRadius = UDim.new(0, 12)
 
 local title = Instance.new("TextLabel")
 title.Size = UDim2.new(1,0,0,60)
 title.BackgroundTransparency = 1
-title.Text = "MATCHA"
+title.Text = "HOHOLWARE 1.0"
 title.TextColor3 = Color3.fromRGB(0, 255, 170)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBlack
-title.Parent = main
+title.Parent = sidebar
+
+-- Tab Buttons
+local tabs = {}
+local currentTab = "Character"
+
+local function switchTab(tabName)
+    currentTab = tabName
+    for name, frame in pairs(tabs) do
+        frame.Visible = (name == tabName)
+    end
+end
+
+local function createTabButton(text, y, tabName)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, -20, 0, 50)
+    btn.Position = UDim2.new(0, 10, 0, y)
+    btn.BackgroundColor3 = Color3.fromRGB(25,25,35)
+    btn.Text = text
+    btn.TextColor3 = Color3.new(1,1,1)
+    btn.TextScaled = true
+    btn.Font = Enum.Font.GothamSemibold
+    btn.Parent = sidebar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
+
+    btn.MouseButton1Click:Connect(function()
+        switchTab(tabName)
+    end)
+end
+
+createTabButton("Combat", 80, "Combat")
+createTabButton("ESP", 140, "ESP")
+createTabButton("Character", 200, "Character")
+
+-- Content Area
+local contentArea = Instance.new("Frame")
+contentArea.Size = UDim2.new(1, -160, 1, 0)
+contentArea.Position = UDim2.new(0, 160, 0, 0)
+contentArea.BackgroundTransparency = 1
+contentArea.Parent = main
+
+-- ==================== Character Tab ====================
+local charTab = Instance.new("Frame")
+charTab.Size = UDim2.new(1,0,1,0)
+charTab.BackgroundTransparency = 1
+charTab.Parent = contentArea
+tabs.Character = charTab
+
+local function createToggle(parent, name, y)
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0.95,0,0,55)
+    frame.Position = UDim2.new(0.025,0,0,y)
+    frame.BackgroundColor3 = Color3.fromRGB(28,28,35)
+    frame.Parent = parent
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0,10)
+
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.45,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = name
+    label.TextColor3 = Color3.new(1,1,1)
+    label.TextScaled = true
+    label.Font = Enum.Font.GothamSemibold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Parent = frame
+
+    local valueBox = Instance.new("TextBox")
+    valueBox.Size = UDim2.new(0.22,0,0,38)
+    valueBox.Position = UDim2.new(0.48,0,0.15,0)
+    valueBox.BackgroundColor3 = Color3.fromRGB(40,40,48)
+    valueBox.Text = name == "Speed Hack" and "2.8" or "65"
+    valueBox.TextColor3 = Color3.new(1,1,1)
+    valueBox.TextScaled = true
+    valueBox.Parent = frame
+    Instance.new("UICorner", valueBox).CornerRadius = UDim.new(0,8)
+
+    local toggle = Instance.new("TextButton")
+    toggle.Size = UDim2.new(0.25,0,0,38)
+    toggle.Position = UDim2.new(0.72,0,0.15,0)
+    toggle.BackgroundColor3 = Color3.fromRGB(200,50,50)
+    toggle.Text = "OFF"
+    toggle.TextColor3 = Color3.new(1,1,1)
+    toggle.TextScaled = true
+    toggle.Parent = frame
+    Instance.new("UICorner", toggle).CornerRadius = UDim.new(0,8)
+
+    toggle.MouseButton1Click:Connect(function()
+        if name == "Speed Hack" then speedEnabled = not speedEnabled
+        elseif name == "Fly Hack" then flyEnabled = not flyEnabled
+        elseif name == "Noclip" then noclipEnabled = not noclipEnabled
+        elseif name == "Godmode" then godEnabled = not godEnabled
+        end
+
+        toggle.Text = toggle.Text == "OFF" and "ON" or "OFF"
+        toggle.BackgroundColor3 = toggle.Text == "ON" and Color3.fromRGB(0,180,90) or Color3.fromRGB(200,50,50)
+    end)
+
+    valueBox.FocusLost:Connect(function()
+        if name == "Speed Hack" then 
+            speedMult = tonumber(valueBox.Text) or 2.8
+        elseif name == "Fly Hack" then 
+            flySpeed = tonumber(valueBox.Text) or 65
+        end
+    end)
+end
+
+createToggle(charTab, "Speed Hack", 30)
+createToggle(charTab, "Fly Hack", 100)
+createToggle(charTab, "Noclip", 170)
+createToggle(charTab, "Godmode", 240)
 
 -- Drag
 title.InputBegan:Connect(function(inp)
@@ -53,137 +169,6 @@ title.InputBegan:Connect(function(inp)
     end
 end)
 
--- Content
-local content = Instance.new("Frame")
-content.Size = UDim2.new(1, -20, 1, -70)
-content.Position = UDim2.new(0, 10, 0, 70)
-content.BackgroundTransparency = 1
-content.Parent = main
-
-local function createFeature(name, y)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(1, 0, 0, 70)
-    frame.Position = UDim2.new(0, 0, 0, y)
-    frame.BackgroundTransparency = 1
-    frame.Parent = content
-
-    local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.65, 0, 0, 50)
-    btn.Position = UDim2.new(0, 0, 0, 10)
-    btn.BackgroundColor3 = Color3.fromRGB(30,30,35)
-    btn.Text = name .. " : OFF"
-    btn.TextColor3 = Color3.new(1,1,1)
-    btn.TextScaled = true
-    btn.Font = Enum.Font.GothamSemibold
-    btn.Parent = frame
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,10)
-
-    local slider = Instance.new("TextBox")
-    slider.Size = UDim2.new(0.3, 0, 0, 35)
-    slider.Position = UDim2.new(0.7, 0, 0, 17)
-    slider.BackgroundColor3 = Color3.fromRGB(40,40,45)
-    slider.Text = name == "Speed Hack" and tostring(speedMult) or tostring(flySpeed)
-    slider.TextColor3 = Color3.new(1,1,1)
-    slider.TextScaled = true
-    slider.Font = Enum.Font.Gotham
-    slider.Parent = frame
-    Instance.new("UICorner", slider).CornerRadius = UDim.new(0,8)
-
-    btn.MouseButton1Click:Connect(function()
-        if name == "Speed Hack" then 
-            speedEnabled = not speedEnabled 
-        elseif name == "Fly Hack" then 
-            flyEnabled = not flyEnabled
-        elseif name == "Noclip" then 
-            noclipEnabled = not noclipEnabled 
-        elseif name == "Godmode" then 
-            godEnabled = not godEnabled 
-        end
-
-        btn.Text = name .. (btn.Text:find("OFF") and " : ON" or " : OFF")
-        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0,180,90) or Color3.fromRGB(30,30,35)
-    end)
-
-    slider.FocusLost:Connect(function()
-        if name == "Speed Hack" then
-            speedMult = tonumber(slider.Text) or 2.5
-        else
-            flySpeed = tonumber(slider.Text) or 60
-        end
-    end)
-
-    return btn
-end
-
-createFeature("Speed Hack", 0)
-createFeature("Fly Hack", 80)
-createFeature("Noclip", 160)
-createFeature("Godmode", 240)
-
--- ==================== Логика ====================
-
--- Speed Hack
-rs.Heartbeat:Connect(function()
-    if player.Character and player.Character:FindFirstChild("Humanoid") then
-        local hum = player.Character.Humanoid
-        hum.WalkSpeed = speedEnabled and 16 * speedMult or 16
-    end
-end)
-
--- Fly Hack (исправленная версия)
-rs.RenderStepped:Connect(function()
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if not root then return end
-
-    if flyEnabled then
-        if not velocity then
-            velocity = Instance.new("BodyVelocity")
-            gyro = Instance.new("BodyGyro")
-            velocity.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-            gyro.MaxTorque = Vector3.new(9e9, 9e9, 9e9)
-            velocity.Parent = root
-            gyro.Parent = root
-        end
-
-        local move = Vector3.new()
-        if uis:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
-        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
-
-        velocity.Velocity = move.Unit * flySpeed
-        gyro.CFrame = camera.CFrame
-
-    elseif velocity then
-        velocity:Destroy()
-        gyro:Destroy()
-        velocity = nil
-        gyro = nil
-    end
-end)
-
--- Noclip
-rs.Stepped:Connect(function()
-    if noclipEnabled and player.Character then
-        for _, part in ipairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
-            end
-        end
-    end
-end)
-
--- Godmode
-rs.Heartbeat:Connect(function()
-    if godEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then
-        local hum = player.Character.Humanoid
-        hum.MaxHealth = 9e9
-        hum.Health = 9e9
-    end
-end)
-
 -- Insert
 uis.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Insert then
@@ -191,4 +176,6 @@ uis.InputBegan:Connect(function(input)
     end
 end)
 
-print("✅ Matcha Menu с слайдерами загружен!")
+switchTab("Character")
+
+print("✅ Широкое компактное меню загружено!")
