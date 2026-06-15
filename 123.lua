@@ -1,7 +1,19 @@
--- // SAFE Matcha Menu (только GUI + Drag) — без крашей
+-- // Safe Matcha Menu + Working Cheats (Speed, Fly, Noclip, Godmode)
 local player = game.Players.LocalPlayer
+local camera = workspace.CurrentCamera
+local rs = game:GetService("RunService")
 local uis = game:GetService("UserInputService")
 
+local speedEnabled = false
+local flyEnabled = false
+local noclipEnabled = false
+local godEnabled = false
+
+local speedMult = 2.8
+local flySpeed = 65
+local bodyVel = nil
+
+-- ==================== GUI ====================
 local sg = Instance.new("ScreenGui")
 sg.ResetOnSpawn = false
 sg.Parent = player:WaitForChild("PlayerGui")
@@ -31,7 +43,7 @@ title.TextScaled = true
 title.Font = Enum.Font.GothamBlack
 title.Parent = sidebar
 
--- Drag (только за заголовок)
+-- Drag
 local dragging = false
 local dragStart, startPos
 
@@ -51,9 +63,7 @@ uis.InputChanged:Connect(function(input)
 end)
 
 title.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
-        dragging = false
-    end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
 end)
 
 -- Content
@@ -63,42 +73,97 @@ content.Position = UDim2.new(0, 130, 0, 0)
 content.BackgroundTransparency = 1
 content.Parent = main
 
-local function addButton(text, y)
+local function addToggle(name, y)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.9, 0, 0, 55)
     btn.Position = UDim2.new(0.05, 0, 0, y)
     btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
-    btn.Text = text .. " : OFF"
+    btn.Text = name .. " : OFF"
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
     btn.Font = Enum.Font.GothamSemibold
     btn.Parent = content
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 10)
-    
+
     btn.MouseButton1Click:Connect(function()
-        if btn.Text:find("OFF") then
-            btn.Text = text .. " : ON"
-            btn.BackgroundColor3 = Color3.fromRGB(0, 170, 80)
-        else
-            btn.Text = text .. " : OFF"
-            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+        if name == "Speed Hack" then 
+            speedEnabled = not speedEnabled 
+        elseif name == "Fly Hack" then 
+            flyEnabled = not flyEnabled 
+            if flyEnabled then
+                bodyVel = Instance.new("BodyVelocity")
+                bodyVel.MaxForce = Vector3.new(0,0,0)
+                bodyVel.Parent = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+            else
+                if bodyVel then bodyVel:Destroy() end
+            end
+        elseif name == "Noclip" then 
+            noclipEnabled = not noclipEnabled 
+        elseif name == "Godmode" then 
+            godEnabled = not godEnabled 
         end
+
+        btn.Text = name .. (btn.Text:find("OFF") and " : ON" or " : OFF")
+        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0, 170, 80) or Color3.fromRGB(30, 30, 35)
     end)
 end
 
-addButton("Aimlock", 30)
-addButton("Silent Aim", 95)
-addButton("ESP", 160)
-addButton("Speed Hack", 225)
-addButton("Fly Hack", 290)
-addButton("Noclip", 355)
-addButton("No Recoil", 420)
+addToggle("Speed Hack", 30)
+addToggle("Fly Hack", 95)
+addToggle("Noclip", 160)
+addToggle("Godmode", 225)
 
-print("✅ Safe Matcha Menu загружен! (Если не крашится — пиши)")
+-- ==================== Функции ====================
 
--- Открытие/закрытие по Insert
+-- Speed Hack
+rs.Heartbeat:Connect(function()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = speedEnabled and 16 * speedMult or 16
+    end
+end)
+
+-- Fly Hack
+rs.RenderStepped:Connect(function()
+    if flyEnabled and bodyVel and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local root = player.Character.HumanoidRootPart
+        local move = Vector3.new()
+        if uis:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
+        if uis:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
+        if uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+
+        bodyVel.Velocity = move.Unit * flySpeed
+        bodyVel.MaxForce = Vector3.new(400000, 400000, 400000)
+    end
+end)
+
+-- Noclip
+rs.Stepped:Connect(function()
+    if noclipEnabled and player.Character then
+        for _, part in ipairs(player.Character:GetDescendants()) do
+            if part:IsA("BasePart") then
+                part.CanCollide = false
+            end
+        end
+    end
+end)
+
+-- Godmode
+rs.Heartbeat:Connect(function()
+    if godEnabled and player.Character and player.Character:FindFirstChild("Humanoid") then
+        local hum = player.Character.Humanoid
+        hum.MaxHealth = 9e9
+        hum.Health = 9e9
+    end
+end)
+
+-- Insert toggle
 uis.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Insert then
         main.Visible = not main.Visible
     end
 end)
+
+print("✅ Safe Menu + Speed + Fly + Noclip + Godmode загружен!")
