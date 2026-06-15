@@ -1,4 +1,6 @@
--- // Hoholware - Финальная версия
+-- // Hoholware - Custom Version
+print("✅ Hoholware загружен!")
+
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = game:GetService("RunService")
@@ -14,6 +16,7 @@ local flySpeed = 70
 
 local velocity, gyro = nil, nil
 
+-- ==================== GUI ====================
 local sg = Instance.new("ScreenGui")
 sg.ResetOnSpawn = false
 sg.Parent = player:WaitForChild("PlayerGui")
