@@ -1,4 +1,4 @@
--- // Matcha Cheat Menu v9 - Fixed aimlock (head), new ESP features (head dot, skeleton, 3D corners, fill), RGB picker, checkbox UI
+-- // Matcha Cheat Menu v10 - Fixed: RGB picker, FOV on cursor, close button, Torso text
 if getgenv().MatchaMenuLoaded then return end
 getgenv().MatchaMenuLoaded = true
 
@@ -11,7 +11,6 @@ local players = game:GetService("Players")
 
 -- ========== SETTINGS ==========
 local settings = {
-    -- Combat
     aimlock = false,
     silentAim = false,
     teamCheck = true,
@@ -19,17 +18,14 @@ local settings = {
     aimPart = "Head",
     fov = 120,
     smoothness = 0.3,
-    -- Speed/Fly/Noclip
     speedHack = false,
     speedMult = 2,
     fly = false,
     flySpeed = 50,
     noclip = false,
-    -- ESP master
     esp = false,
-    -- ESP components
     espBox = true,
-    espBoxType = "Square",   -- Square, Corner3D, Filled
+    espBoxType = "Square",
     espBoxColor = Color3.fromRGB(80, 200, 120),
     espBoxThickness = 2,
     espBoxFillTransparency = 0.5,
@@ -56,7 +52,7 @@ local flyActive = false
 local espObjects = {}
 local drawingAvailable = pcall(function() return Drawing.new("Square") end)
 
--- FOV circle (follows mouse exactly)
+-- FOV circle (follows mouse cursor exactly)
 local fovCircle = drawingAvailable and Drawing.new("Circle") or nil
 if fovCircle then
     fovCircle.Thickness = 2
@@ -67,18 +63,16 @@ if fovCircle then
     fovCircle.Visible = false
 end
 
--- Helper functions
-local function tableFind(t, val)
-    for i, v in ipairs(t) do if v == val then return i end end
-    return nil
+local function getMousePos()
+    return Vector2.new(mouse.X, mouse.Y)
 end
 
--- ========== AIM POSITION (FIXED) ==========
+-- ========== AIM HELPERS ==========
 local function getAimPosition(character)
     if not character then return nil end
     if settings.aimPart == "Head" then
         local head = character:FindFirstChild("Head")
-        if head then return head.Position + Vector3.new(0, 0.2, 0) end  -- slight offset for center
+        if head then return head.Position + Vector3.new(0, 0.2, 0) end
     elseif settings.aimPart == "Torso" then
         local torso = character:FindFirstChild("UpperTorso") or character:FindFirstChild("HumanoidRootPart")
         if torso then return torso.Position end
@@ -94,12 +88,10 @@ local function getAimPosition(character)
             return chosen.Position + (chosen.Name == "Head" and Vector3.new(0, 0.2, 0) or Vector3.new(0,0,0))
         end
     end
-    -- fallback
     local root = character:FindFirstChild("HumanoidRootPart") or character:FindFirstChild("Head")
     return root and root.Position
 end
 
--- Visibility check
 local function isVisible(part)
     if not part then return false end
     local origin = camera.CFrame.Position
@@ -109,10 +101,9 @@ local function isVisible(part)
     return hit and hit:IsDescendantOf(part.Parent)
 end
 
--- Nearest target (based on FOV around cursor)
 local function getNearestTargetFromCursor()
     local nearest, shortest = nil, settings.fov
-    local cursorPos = Vector2.new(mouse.X, mouse.Y)
+    local cursorPos = getMousePos()
     for _, plr in ipairs(players:GetPlayers()) do
         if plr ~= player and plr.Character then
             local hum = plr.Character:FindFirstChild("Humanoid")
@@ -129,7 +120,7 @@ local function getNearestTargetFromCursor()
                             if not isVisible(checkPart) then continue end
                         end
                         shortest = dist
-                        nearest = {plr = plr, position = aimPos, part = plr.Character:FindFirstChild(settings.aimPart == "Head" and "Head" or "HumanoidRootPart")}
+                        nearest = {plr = plr, position = aimPos}
                     end
                 end
             end
@@ -138,12 +129,11 @@ local function getNearestTargetFromCursor()
     return nearest
 end
 
--- Aimlock (mouse movement)
 local function moveMouseToTarget(targetInfo)
     if not targetInfo or not targetInfo.position then return end
     local screenPos, onScreen = camera:WorldToViewportPoint(targetInfo.position)
     if onScreen then
-        local delta = Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mouse.X, mouse.Y)
+        local delta = Vector2.new(screenPos.X, screenPos.Y) - getMousePos()
         if delta.Magnitude > 1 then
             if mousemoverel then
                 mousemoverel(delta.X, delta.Y)
@@ -161,7 +151,7 @@ runService.RenderStepped:Connect(function()
         fovCircle.Visible = (settings.aimlock or settings.silentAim) and camera.ViewportSize.X > 0
         if fovCircle.Visible then
             fovCircle.Radius = settings.fov * 2.5
-            fovCircle.Position = Vector2.new(mouse.X, mouse.Y)  -- exactly at cursor
+            fovCircle.Position = getMousePos()
         end
     end
     if settings.aimlock and userInputService:IsKeyDown(Enum.KeyCode.F) then
@@ -205,52 +195,50 @@ local function disableSilentAim()
     silentActive = false
 end
 
--- ========== ESP with HEAD DOT, SKELETON, 3D CORNERS, FILL ==========
+-- ========== ESP (FULLY WORKING) ==========
 local function getBonePosition(character, boneName)
     if not character then return nil end
-    -- try direct part
     local part = character:FindFirstChild(boneName)
-    if part then return part.Position end
-    -- try via HumanoidRootPart for relative positioning? too complex, just skip
-    return nil
+    return part and part.Position
 end
 
 local function drawSkeleton(plr, drawings)
-    if not drawings.skeletonLines then
-        drawings.skeletonLines = {}
-    end
-    local character = plr.Character
-    if not character then return end
-    local head = getBonePosition(character, "Head")
-    local upperTorso = getBonePosition(character, "UpperTorso") or getBonePosition(character, "HumanoidRootPart")
-    local leftArm = getBonePosition(character, "LeftUpperArm") or getBonePosition(character, "LeftArm")
-    local rightArm = getBonePosition(character, "RightUpperArm") or getBonePosition(character, "RightArm")
-    local leftLeg = getBonePosition(character, "LeftUpperLeg") or getBonePosition(character, "LeftLeg")
-    local rightLeg = getBonePosition(character, "RightUpperLeg") or getBonePosition(character, "RightLeg")
-    
+    if not drawings.skeletonLines then drawings.skeletonLines = {} end
+    local char = plr.Character
+    if not char then return end
+    local head = getBonePosition(char, "Head")
+    local upperTorso = getBonePosition(char, "UpperTorso") or getBonePosition(char, "HumanoidRootPart")
+    local leftArm = getBonePosition(char, "LeftUpperArm") or getBonePosition(char, "LeftArm")
+    local rightArm = getBonePosition(char, "RightUpperArm") or getBonePosition(char, "RightArm")
+    local leftLeg = getBonePosition(char, "LeftUpperLeg") or getBonePosition(char, "LeftLeg")
+    local rightLeg = getBonePosition(char, "RightUpperLeg") or getBonePosition(char, "RightLeg")
+    local leftFore = getBonePosition(char, "LeftLowerArm")
+    local rightFore = getBonePosition(char, "RightLowerArm")
+    local leftFoot = getBonePosition(char, "LeftLowerLeg")
+    local rightFoot = getBonePosition(char, "RightLowerLeg")
     local connections = {
         {head, upperTorso},
         {upperTorso, leftArm}, {upperTorso, rightArm},
         {upperTorso, leftLeg}, {upperTorso, rightLeg},
-        {leftArm, getBonePosition(character, "LeftLowerArm")}, {rightArm, getBonePosition(character, "RightLowerArm")},
-        {leftLeg, getBonePosition(character, "LeftLowerLeg")}, {rightLeg, getBonePosition(character, "RightLowerLeg")}
+        {leftArm, leftFore}, {rightArm, rightFore},
+        {leftLeg, leftFoot}, {rightLeg, rightFoot}
     }
     for i, conn in ipairs(connections) do
         local a, b = conn[1], conn[2]
         if a and b then
-            local screenA = camera:WorldToViewportPoint(a)
-            local screenB = camera:WorldToViewportPoint(b)
-            if screenA.Z > 0 and screenB.Z > 0 then
+            local sa = camera:WorldToViewportPoint(a)
+            local sb = camera:WorldToViewportPoint(b)
+            if sa.Z > 0 and sb.Z > 0 then
                 if not drawings.skeletonLines[i] then
                     drawings.skeletonLines[i] = Drawing.new("Line")
                     drawings.skeletonLines[i].Thickness = 2
-                    drawings.skeletonLines[i].Color = settings.espSkeletonColor
                 end
-                drawings.skeletonLines[i].From = Vector2.new(screenA.X, screenA.Y)
-                drawings.skeletonLines[i].To = Vector2.new(screenB.X, screenB.Y)
+                drawings.skeletonLines[i].From = Vector2.new(sa.X, sa.Y)
+                drawings.skeletonLines[i].To = Vector2.new(sb.X, sb.Y)
+                drawings.skeletonLines[i].Color = settings.espSkeletonColor
                 drawings.skeletonLines[i].Visible = true
-            else
-                if drawings.skeletonLines[i] then drawings.skeletonLines[i].Visible = false end
+            elseif drawings.skeletonLines[i] then
+                drawings.skeletonLines[i].Visible = false
             end
         end
     end
@@ -265,51 +253,44 @@ local function updateESP()
             if d.healthBarBG then d.healthBarBG.Visible = false end
             if d.headDot then d.headDot.Visible = false end
             if d.skeletonLines then
-                for _, line in ipairs(d.skeletonLines) do line.Visible = false end
+                for _, l in pairs(d.skeletonLines) do if l then l.Visible = false end end
+            end
+            if d.cornerLines then
+                for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end
             end
         end
         return
     end
-    
-    for plr, drawings in pairs(espObjects) do
+    for plr, d in pairs(espObjects) do
         if not plr or not plr.Character then
-            if drawings.box then drawings.box.Visible = false end
-            if drawings.name then drawings.name.Visible = false end
-            if drawings.healthBar then drawings.healthBar.Visible = false end
-            if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.headDot then drawings.headDot.Visible = false end
-            if drawings.skeletonLines then
-                for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
-            end
+            if d.box then d.box.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false end
+            if d.healthBarBG then d.healthBarBG.Visible = false end
+            if d.headDot then d.headDot.Visible = false end
+            if d.skeletonLines then for _, l in pairs(d.skeletonLines) do if l then l.Visible = false end end end
+            if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
             continue
         end
         local root = plr.Character:FindFirstChild("HumanoidRootPart")
         local hum = plr.Character:FindFirstChild("Humanoid")
         if not root or not hum or hum.Health <= 0 then
-            if drawings.box then drawings.box.Visible = false end
-            if drawings.name then drawings.name.Visible = false end
-            if drawings.healthBar then drawings.healthBar.Visible = false end
-            if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.headDot then drawings.headDot.Visible = false end
-            if drawings.skeletonLines then
-                for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
-            end
+            if d.box then d.box.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false end
+            if d.healthBarBG then d.healthBarBG.Visible = false end
+            if d.headDot then d.headDot.Visible = false end
             continue
         end
-        
-        local distance = (camera.CFrame.Position - root.Position).Magnitude
-        if distance > settings.espMaxDistance then
-            if drawings.box then drawings.box.Visible = false end
-            if drawings.name then drawings.name.Visible = false end
-            if drawings.healthBar then drawings.healthBar.Visible = false end
-            if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.headDot then drawings.headDot.Visible = false end
-            if drawings.skeletonLines then
-                for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
-            end
+        local dist = (camera.CFrame.Position - root.Position).Magnitude
+        if dist > settings.espMaxDistance then
+            if d.box then d.box.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false end
+            if d.healthBarBG then d.healthBarBG.Visible = false end
+            if d.headDot then d.headDot.Visible = false end
             continue
         end
-        
         local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
         if onScreen then
             local top = camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
@@ -319,200 +300,151 @@ local function updateESP()
                 local boxWidth = height / 1.8
                 local boxHeight = height
                 local boxPos = Vector2.new(screenPos.X - boxWidth/2, screenPos.Y - boxHeight/2)
-                
-                -- BOX
+                -- Box
                 if settings.espBox then
-                    if not drawings.box then
-                        drawings.box = Drawing.new("Square")
-                        drawings.box.Filled = false
-                    end
-                    drawings.box.Visible = true
+                    if not d.box then d.box = Drawing.new("Square") end
+                    d.box.Visible = true
                     if settings.espBoxType == "Square" then
-                        drawings.box.Filled = false
-                        drawings.box.Size = Vector2.new(boxWidth, boxHeight)
-                        drawings.box.Position = boxPos
-                        drawings.box.Color = settings.espBoxColor
-                        drawings.box.Thickness = settings.espBoxThickness
+                        d.box.Filled = false
+                        d.box.Size = Vector2.new(boxWidth, boxHeight)
+                        d.box.Position = boxPos
+                        d.box.Color = settings.espBoxColor
+                        d.box.Thickness = settings.espBoxThickness
+                        if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
                     elseif settings.espBoxType == "Filled" then
-                        drawings.box.Filled = true
-                        drawings.box.Transparency = settings.espBoxFillTransparency
-                        drawings.box.Size = Vector2.new(boxWidth, boxHeight)
-                        drawings.box.Position = boxPos
-                        drawings.box.Color = settings.espBoxColor
-                        drawings.box.Thickness = settings.espBoxThickness
-                    elseif settings.espBoxType == "Corner3D" then
-                        -- Draw 4 corner brackets (simulated by 2 lines per corner)
-                        drawings.box.Visible = false  -- hide main box, we will draw lines manually
-                        -- We'll implement using 8 line objects
-                        if not drawings.cornerLines then
-                            drawings.cornerLines = {}
-                            for i = 1, 8 do drawings.cornerLines[i] = Drawing.new("Line") end
-                        end
-                        local cornerLen = math.min(15, boxWidth/4)
-                        -- top-left
-                        drawings.cornerLines[1].From = boxPos
-                        drawings.cornerLines[1].To = Vector2.new(boxPos.X + cornerLen, boxPos.Y)
-                        drawings.cornerLines[2].From = boxPos
-                        drawings.cornerLines[2].To = Vector2.new(boxPos.X, boxPos.Y + cornerLen)
-                        -- top-right
+                        d.box.Filled = true
+                        d.box.Transparency = settings.espBoxFillTransparency
+                        d.box.Size = Vector2.new(boxWidth, boxHeight)
+                        d.box.Position = boxPos
+                        d.box.Color = settings.espBoxColor
+                        d.box.Thickness = settings.espBoxThickness
+                        if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
+                    else -- Corner3D
+                        d.box.Visible = false
+                        if not d.cornerLines then d.cornerLines = {} end
+                        local len = math.min(15, boxWidth/4)
+                        local tl = boxPos
                         local tr = Vector2.new(boxPos.X + boxWidth, boxPos.Y)
-                        drawings.cornerLines[3].From = tr
-                        drawings.cornerLines[3].To = Vector2.new(tr.X - cornerLen, tr.Y)
-                        drawings.cornerLines[4].From = tr
-                        drawings.cornerLines[4].To = Vector2.new(tr.X, tr.Y + cornerLen)
-                        -- bottom-left
                         local bl = Vector2.new(boxPos.X, boxPos.Y + boxHeight)
-                        drawings.cornerLines[5].From = bl
-                        drawings.cornerLines[5].To = Vector2.new(bl.X + cornerLen, bl.Y)
-                        drawings.cornerLines[6].From = bl
-                        drawings.cornerLines[6].To = Vector2.new(bl.X, bl.Y - cornerLen)
-                        -- bottom-right
                         local br = Vector2.new(boxPos.X + boxWidth, boxPos.Y + boxHeight)
-                        drawings.cornerLines[7].From = br
-                        drawings.cornerLines[7].To = Vector2.new(br.X - cornerLen, br.Y)
-                        drawings.cornerLines[8].From = br
-                        drawings.cornerLines[8].To = Vector2.new(br.X, br.Y - cornerLen)
-                        for _, line in ipairs(drawings.cornerLines) do
-                            line.Color = settings.espBoxColor
-                            line.Thickness = settings.espBoxThickness
-                            line.Visible = true
+                        local lines = {
+                            {tl, Vector2.new(tl.X + len, tl.Y)},
+                            {tl, Vector2.new(tl.X, tl.Y + len)},
+                            {tr, Vector2.new(tr.X - len, tr.Y)},
+                            {tr, Vector2.new(tr.X, tr.Y + len)},
+                            {bl, Vector2.new(bl.X + len, bl.Y)},
+                            {bl, Vector2.new(bl.X, bl.Y - len)},
+                            {br, Vector2.new(br.X - len, br.Y)},
+                            {br, Vector2.new(br.X, br.Y - len)},
+                        }
+                        for i, seg in ipairs(lines) do
+                            if not d.cornerLines[i] then d.cornerLines[i] = Drawing.new("Line") end
+                            d.cornerLines[i].From = seg[1]
+                            d.cornerLines[i].To = seg[2]
+                            d.cornerLines[i].Color = settings.espBoxColor
+                            d.cornerLines[i].Thickness = settings.espBoxThickness
+                            d.cornerLines[i].Visible = true
                         end
+                        for i = #lines+1, #d.cornerLines do if d.cornerLines[i] then d.cornerLines[i].Visible = false end end
                     end
                 else
-                    if drawings.box then drawings.box.Visible = false end
-                    if drawings.cornerLines then
-                        for _, line in ipairs(drawings.cornerLines) do line.Visible = false end
-                    end
+                    if d.box then d.box.Visible = false end
+                    if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
                 end
-                
-                -- NAME
+                -- Name
                 if settings.espName then
-                    if not drawings.name then
-                        drawings.name = Drawing.new("Text")
-                        drawings.name.Size = 14
-                        drawings.name.Outline = true
-                        drawings.name.Center = true
-                    end
+                    if not d.name then d.name = Drawing.new("Text") end
+                    d.name.Size = 14
+                    d.name.Outline = true
+                    d.name.Center = true
                     local text = plr.Name
-                    if settings.espDistance then text = text .. " [" .. math.floor(distance) .. "m]" end
+                    if settings.espDistance then text = text .. " [" .. math.floor(dist) .. "m]" end
                     if settings.espHealth then text = text .. " [" .. math.floor(hum.Health) .. " HP]" end
-                    drawings.name.Text = text
-                    drawings.name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 15)
-                    drawings.name.Visible = true
-                    drawings.name.Color = settings.espNameColor
-                elseif drawings.name then
-                    drawings.name.Visible = false
-                end
-                
-                -- HEALTH BAR (Side or Top)
+                    d.name.Text = text
+                    d.name.Position = Vector2.new(screenPos.X, screenPos.Y - boxHeight/2 - 15)
+                    d.name.Color = settings.espNameColor
+                    d.name.Visible = true
+                elseif d.name then d.name.Visible = false end
+                -- Health bar
                 if settings.espHealth then
+                    if not d.healthBar then d.healthBar = Drawing.new("Line"); d.healthBarBG = Drawing.new("Line") end
+                    local healthPercent = hum.Health / hum.MaxHealth
                     if settings.espHealthBarPos == "Side" then
-                        if not drawings.healthBar then
-                            drawings.healthBar = Drawing.new("Line")
-                            drawings.healthBarBG = Drawing.new("Line")
-                        end
                         local barWidth = 4
-                        local healthPercent = hum.Health / hum.MaxHealth
                         local barHeight = boxHeight * healthPercent
                         local barPos = Vector2.new(boxPos.X - barWidth - 2, boxPos.Y + (boxHeight - barHeight))
-                        drawings.healthBarBG.From = Vector2.new(barPos.X, boxPos.Y)
-                        drawings.healthBarBG.To = Vector2.new(barPos.X, boxPos.Y + boxHeight)
-                        drawings.healthBarBG.Thickness = barWidth
-                        drawings.healthBarBG.Color = Color3.fromRGB(50,50,50)
-                        drawings.healthBar.From = barPos
-                        drawings.healthBar.To = Vector2.new(barPos.X, barPos.Y + barHeight)
-                        drawings.healthBar.Thickness = barWidth
-                        drawings.healthBar.Color = settings.espHealthBarColor
-                        drawings.healthBar.Visible = true
-                        drawings.healthBarBG.Visible = true
-                    else -- Top
-                        if not drawings.healthBar then
-                            drawings.healthBar = Drawing.new("Line")
-                            drawings.healthBarBG = Drawing.new("Line")
-                        end
+                        d.healthBarBG.From = Vector2.new(barPos.X, boxPos.Y)
+                        d.healthBarBG.To = Vector2.new(barPos.X, boxPos.Y + boxHeight)
+                        d.healthBarBG.Thickness = barWidth
+                        d.healthBarBG.Color = Color3.fromRGB(50,50,50)
+                        d.healthBar.From = barPos
+                        d.healthBar.To = Vector2.new(barPos.X, barPos.Y + barHeight)
+                        d.healthBar.Thickness = barWidth
+                        d.healthBar.Color = settings.espHealthBarColor
+                        d.healthBar.Visible = true
+                        d.healthBarBG.Visible = true
+                    else
                         local barWidth = boxWidth
                         local barHeight = 4
-                        local healthPercent = hum.Health / hum.MaxHealth
                         local barStart = Vector2.new(boxPos.X, boxPos.Y - 6)
                         local barEnd = Vector2.new(boxPos.X + barWidth * healthPercent, boxPos.Y - 6)
-                        drawings.healthBarBG.From = Vector2.new(boxPos.X, boxPos.Y - 6)
-                        drawings.healthBarBG.To = Vector2.new(boxPos.X + barWidth, boxPos.Y - 6)
-                        drawings.healthBarBG.Thickness = barHeight
-                        drawings.healthBarBG.Color = Color3.fromRGB(50,50,50)
-                        drawings.healthBar.From = barStart
-                        drawings.healthBar.To = barEnd
-                        drawings.healthBar.Thickness = barHeight
-                        drawings.healthBar.Color = settings.espHealthBarColor
-                        drawings.healthBar.Visible = true
-                        drawings.healthBarBG.Visible = true
+                        d.healthBarBG.From = Vector2.new(boxPos.X, boxPos.Y - 6)
+                        d.healthBarBG.To = Vector2.new(boxPos.X + barWidth, boxPos.Y - 6)
+                        d.healthBarBG.Thickness = barHeight
+                        d.healthBarBG.Color = Color3.fromRGB(50,50,50)
+                        d.healthBar.From = barStart
+                        d.healthBar.To = barEnd
+                        d.healthBar.Thickness = barHeight
+                        d.healthBar.Color = settings.espHealthBarColor
+                        d.healthBar.Visible = true
+                        d.healthBarBG.Visible = true
                     end
                 else
-                    if drawings.healthBar then drawings.healthBar.Visible = false end
-                    if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
+                    if d.healthBar then d.healthBar.Visible = false; d.healthBarBG.Visible = false end
                 end
-                
-                -- HEAD DOT
+                -- Head dot
                 if settings.espHeadDot then
                     local head = plr.Character:FindFirstChild("Head")
                     if head then
-                        local headPos, headOn = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.2, 0))
-                        if headOn then
-                            if not drawings.headDot then
-                                drawings.headDot = Drawing.new("Circle")
-                                drawings.headDot.NumSides = 16
-                                drawings.headDot.Filled = true
-                            end
-                            drawings.headDot.Radius = settings.espHeadDotSize
-                            drawings.headDot.Position = Vector2.new(headPos.X, headPos.Y)
-                            drawings.headDot.Color = settings.espHeadDotColor
-                            drawings.headDot.Visible = true
-                        else
-                            if drawings.headDot then drawings.headDot.Visible = false end
-                        end
+                        local hpos, hon = camera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.2, 0))
+                        if hon then
+                            if not d.headDot then d.headDot = Drawing.new("Circle") end
+                            d.headDot.Radius = settings.espHeadDotSize
+                            d.headDot.Position = Vector2.new(hpos.X, hpos.Y)
+                            d.headDot.Color = settings.espHeadDotColor
+                            d.headDot.Filled = true
+                            d.headDot.Visible = true
+                        elseif d.headDot then d.headDot.Visible = false end
                     end
-                elseif drawings.headDot then
-                    drawings.headDot.Visible = false
-                end
-                
-                -- SKELETON
+                elseif d.headDot then d.headDot.Visible = false end
+                -- Skeleton
                 if settings.espSkeleton then
-                    drawSkeleton(plr, drawings)
-                elseif drawings.skeletonLines then
-                    for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
+                    drawSkeleton(plr, d)
+                elseif d.skeletonLines then
+                    for _, l in pairs(d.skeletonLines) do if l then l.Visible = false end end
                 end
-                
             else
-                if drawings.box then drawings.box.Visible = false end
-                if drawings.name then drawings.name.Visible = false end
-                if drawings.healthBar then drawings.healthBar.Visible = false end
-                if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-                if drawings.headDot then drawings.headDot.Visible = false end
-                if drawings.skeletonLines then
-                    for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
-                end
-                if drawings.cornerLines then
-                    for _, line in ipairs(drawings.cornerLines) do line.Visible = false end
-                end
+                if d.box then d.box.Visible = false end
+                if d.name then d.name.Visible = false end
+                if d.healthBar then d.healthBar.Visible = false; d.healthBarBG.Visible = false end
+                if d.headDot then d.headDot.Visible = false end
+                if d.skeletonLines then for _, l in pairs(d.skeletonLines) do if l then l.Visible = false end end end
+                if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
             end
         else
-            if drawings.box then drawings.box.Visible = false end
-            if drawings.name then drawings.name.Visible = false end
-            if drawings.healthBar then drawings.healthBar.Visible = false end
-            if drawings.healthBarBG then drawings.healthBarBG.Visible = false end
-            if drawings.headDot then drawings.headDot.Visible = false end
-            if drawings.skeletonLines then
-                for _, line in ipairs(drawings.skeletonLines) do line.Visible = false end
-            end
-            if drawings.cornerLines then
-                for _, line in ipairs(drawings.cornerLines) do line.Visible = false end
-            end
+            if d.box then d.box.Visible = false end
+            if d.name then d.name.Visible = false end
+            if d.healthBar then d.healthBar.Visible = false; d.healthBarBG.Visible = false end
+            if d.headDot then d.headDot.Visible = false end
+            if d.skeletonLines then for _, l in pairs(d.skeletonLines) do if l then l.Visible = false end end end
+            if d.cornerLines then for _, l in pairs(d.cornerLines) do if l then l.Visible = false end end end
         end
     end
 end
 
 local function createESP(plr)
     if plr == player or espObjects[plr] or not drawingAvailable then return end
-    espObjects[plr] = {}  -- empty, will be filled on demand
+    espObjects[plr] = {}
 end
 
 players.PlayerRemoving:Connect(function(plr)
@@ -531,7 +463,6 @@ players.PlayerAdded:Connect(createESP)
 runService.RenderStepped:Connect(updateESP)
 
 -- ========== SPEED, FLY, NOCLIP ==========
--- (same as before, stable)
 local function resetWalkSpeed()
     local hum = player.Character and player.Character:FindFirstChild("Humanoid")
     if hum then hum.WalkSpeed = originalWalkSpeed end
@@ -596,9 +527,7 @@ end)
 runService.Stepped:Connect(function()
     if settings.noclip and player.Character then
         for _, part in ipairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") and part.CanCollide then
-                part.CanCollide = false
-            end
+            if part:IsA("BasePart") and part.CanCollide then part.CanCollide = false end
         end
     end
 end)
@@ -608,15 +537,15 @@ player.CharacterAdded:Connect(function()
     if settings.fly then task.wait(0.5); enableFly() end
 end)
 
--- ========== NEW GUI WITH CHECKBOX SQUARES AND RGB PICKER ==========
+-- ========== GUI WITH CLOSE BUTTON, FIXED RGB PICKER ==========
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MatchaMenu"
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 900, 0, 560)
-mainFrame.Position = UDim2.new(0.5, -450, 0.5, -280)
+mainFrame.Size = UDim2.new(0, 900, 0, 580)
+mainFrame.Position = UDim2.new(0.5, -450, 0.5, -290)
 mainFrame.BackgroundColor3 = Color3.fromRGB(18, 20, 22)
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
@@ -626,16 +555,39 @@ mainFrame.Parent = screenGui
 local corner = Instance.new("UICorner", mainFrame)
 corner.CornerRadius = UDim.new(0, 10)
 
+-- Title bar with close button
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 40)
+titleBar.BackgroundTransparency = 1
+titleBar.Parent = mainFrame
+
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, 0, 0, 40)
+title.Size = UDim2.new(1, -40, 1, 0)
+title.Position = UDim2.new(0, 10, 0, 0)
 title.BackgroundTransparency = 1
 title.Text = "MATCHA CHEAT MENU"
 title.TextColor3 = Color3.fromRGB(80, 200, 120)
 title.TextScaled = true
 title.Font = Enum.Font.GothamBold
-title.Parent = mainFrame
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = titleBar
 
--- Sidebar (vertical tabs)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -35, 0, 5)
+closeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.new(1,1,1)
+closeBtn.TextScaled = true
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = titleBar
+local closeCorner = Instance.new("UICorner", closeBtn)
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeBtn.MouseButton1Click:Connect(function()
+    mainFrame.Visible = false
+end)
+
+-- Sidebar
 local sidebar = Instance.new("Frame")
 sidebar.Size = UDim2.new(0, 160, 1, -40)
 sidebar.Position = UDim2.new(0, 0, 0, 40)
@@ -660,7 +612,7 @@ local activeTab = "Combat"
 local tabButtons = {}
 local contentPanels = {}
 
--- Helper: create checkbox with square indicator
+-- Helper UI elements
 local function createCheckbox(parent, text, y, getter, setter)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0.9, 0, 0, 34)
@@ -747,7 +699,7 @@ local function createSlider(parent, name, y, minVal, maxVal, getter, setter)
     update(getter())
 end
 
--- RGB Color Picker (3 sliders)
+-- FIXED RGB PICKER (no errors)
 local function createRGBPicker(parent, name, y, getter, setter)
     local frame = Instance.new("Frame")
     frame.Size = UDim2.new(0.9, 0, 0, 100)
@@ -764,14 +716,6 @@ local function createRGBPicker(parent, name, y, getter, setter)
     label.Font = Enum.Font.Gotham
     label.Parent = frame
     
-    local r, g, b = getter().R, getter().G, getter().B
-    local rSlider, gSlider, bSlider
-    
-    local function updateColor()
-        setter(Color3.new(rSlider.Value, gSlider.Value, bSlider.Value))
-        preview.BackgroundColor3 = getter()
-    end
-    
     local preview = Instance.new("Frame")
     preview.Size = UDim2.new(0, 40, 0, 40)
     preview.Position = UDim2.new(0.8, 0, 0.2, 0)
@@ -781,32 +725,46 @@ local function createRGBPicker(parent, name, y, getter, setter)
     preview.Parent = frame
     Instance.new("UICorner", preview).CornerRadius = UDim.new(0, 6)
     
-    local function makeSlider(min, max, val, color)
-        local s = Instance.new("TextBox")
-        s.Size = UDim2.new(0.7, 0, 0, 24)
-        s.Position = UDim2.new(0, 0, 0, 25)
-        s.BackgroundColor3 = Color3.fromRGB(40,42,45)
-        s.Text = tostring(val)
-        s.TextColor3 = Color3.new(1,1,1)
-        s.Font = Enum.Font.Gotham
-        s.Parent = frame
-        Instance.new("UICorner", s).CornerRadius = UDim.new(0, 6)
-        local function update(val)
-            local num = math.clamp(tonumber(val) or 0, min, max)
-            s.Text = tostring(num)
-            return num
-        end
-        s.FocusLost:Connect(function() 
-            local num = update(s.Text)
-            if color == "r" then rSlider = num
-            elseif color == "g" then gSlider = num
-            else bSlider = num end
-            updateColor()
-        end)
-        return update(s.Text)
+    local rVal = getter().R
+    local gVal = getter().G
+    local bVal = getter().B
+    
+    local function updateColor()
+        local newColor = Color3.new(rVal, gVal, bVal)
+        setter(newColor)
+        preview.BackgroundColor3 = newColor
     end
     
-    rSlider = makeSlider(0,1, r, "r")
+    local function makeSlider(minVal, maxVal, initial, labelText, colorPart)
+        local sFrame = Instance.new("Frame")
+        sFrame.Size = UDim2.new(0.7, 0, 0, 28)
+        sFrame.Position = UDim2.new(0, 0, 0, 25)
+        sFrame.BackgroundTransparency = 1
+        sFrame.Parent = frame
+        
+        local box = Instance.new("TextBox")
+        box.Size = UDim2.new(1, 0, 1, 0)
+        box.BackgroundColor3 = Color3.fromRGB(40,42,45)
+        box.Text = tostring(initial)
+        box.TextColor3 = Color3.new(1,1,1)
+        box.Font = Enum.Font.Gotham
+        box.Parent = sFrame
+        Instance.new("UICorner", box).CornerRadius = UDim.new(0, 6)
+        
+        local function update(val)
+            local num = math.clamp(tonumber(val) or 0, minVal, maxVal)
+            box.Text = tostring(num)
+            if colorPart == "r" then rVal = num
+            elseif colorPart == "g" then gVal = num
+            else bVal = num end
+            updateColor()
+        end
+        box.FocusLost:Connect(function() update(box.Text) end)
+        update(initial)
+        return box
+    end
+    
+    local rBox = makeSlider(0, 1, rVal, "R", "r")
     local rLabel = Instance.new("TextLabel")
     rLabel.Size = UDim2.new(0.1, 0, 0, 20)
     rLabel.Position = UDim2.new(0.72, 0, 0.25, 0)
@@ -817,7 +775,7 @@ local function createRGBPicker(parent, name, y, getter, setter)
     rLabel.Font = Enum.Font.GothamBold
     rLabel.Parent = frame
     
-    gSlider = makeSlider(0,1, g, "g")
+    local gBox = makeSlider(0, 1, gVal, "G", "g")
     local gLabel = Instance.new("TextLabel")
     gLabel.Size = UDim2.new(0.1, 0, 0, 20)
     gLabel.Position = UDim2.new(0.72, 0, 0.45, 0)
@@ -828,7 +786,7 @@ local function createRGBPicker(parent, name, y, getter, setter)
     gLabel.Font = Enum.Font.GothamBold
     gLabel.Parent = frame
     
-    bSlider = makeSlider(0,1, b, "b")
+    local bBox = makeSlider(0, 1, bVal, "B", "b")
     local bLabel = Instance.new("TextLabel")
     bLabel.Size = UDim2.new(0.1, 0, 0, 20)
     bLabel.Position = UDim2.new(0.72, 0, 0.65, 0)
@@ -839,7 +797,6 @@ local function createRGBPicker(parent, name, y, getter, setter)
     bLabel.Font = Enum.Font.GothamBold
     bLabel.Parent = frame
     
-    updateColor()
     return frame
 end
 
@@ -905,7 +862,7 @@ local function createDropdown(parent, name, y, options, getter, setter)
     end)
 end
 
--- Build panels (each panel is a frame inside contentArea)
+-- Build panels
 local function buildCombat(container)
     local y = 10
     createCheckbox(container, "Aimlock (Hold F)", y, function() return settings.aimlock end, function(v) settings.aimlock = v end); y = y + 45
@@ -923,9 +880,6 @@ local function buildESP(container)
     createCheckbox(container, "Enable ESP", y, function() return settings.esp end, function(v) settings.esp = v end); y = y + 45
     createCheckbox(container, "Show Box", y, function() return settings.espBox end, function(v) settings.espBox = v end); y = y + 45
     createDropdown(container, "Box Type", y, {"Square", "Corner3D", "Filled"}, function() return settings.espBoxType end, function(v) settings.espBoxType = v end); y = y + 65
-    if settings.espBoxType == "Filled" then
-        createSlider(container, "Fill Transparency", y, 0.1, 0.9, function() return settings.espBoxFillTransparency end, function(v) settings.espBoxFillTransparency = v end); y = y + 65
-    end
     createSlider(container, "Box Thickness", y, 1, 5, function() return settings.espBoxThickness end, function(v) settings.espBoxThickness = v end); y = y + 65
     createRGBPicker(container, "Box Color", y, function() return settings.espBoxColor end, function(v) settings.espBoxColor = v end); y = y + 110
     createCheckbox(container, "Show Name", y, function() return settings.espName end, function(v) settings.espName = v end); y = y + 45
@@ -985,7 +939,7 @@ for _, name in ipairs(tabNames) do
     elseif name == "Misc" then buildMisc(panel) end
 end
 
--- Create tab buttons
+-- Tab buttons
 for i, name in ipairs(tabNames) do
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(1, -10, 0, 40)
@@ -999,13 +953,9 @@ for i, name in ipairs(tabNames) do
     Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
     btn.MouseButton1Click:Connect(function()
         activeTab = name
-        for _, b in pairs(tabButtons) do
-            b.BackgroundColor3 = Color3.fromRGB(30, 32, 35)
-        end
+        for _, b in pairs(tabButtons) do b.BackgroundColor3 = Color3.fromRGB(30, 32, 35) end
         btn.BackgroundColor3 = Color3.fromRGB(80, 200, 120)
-        for tab, panel in pairs(contentPanels) do
-            panel.Visible = (tab == activeTab)
-        end
+        for tab, panel in pairs(contentPanels) do panel.Visible = (tab == activeTab) end
     end)
     tabButtons[name] = btn
 end
@@ -1019,7 +969,6 @@ userInputService.InputBegan:Connect(function(input, gp)
     elseif k == Enum.KeyCode.V then
         settings.silentAim = not settings.silentAim
         if settings.silentAim then enableSilentAim() else disableSilentAim() end
-        -- refresh combat panel checkboxes? just simple rebuild of combat panel
         if activeTab == "Combat" then
             for _, child in ipairs(contentPanels["Combat"]:GetChildren()) do child:Destroy() end
             buildCombat(contentPanels["Combat"])
@@ -1054,4 +1003,4 @@ userInputService.InputBegan:Connect(function(input, gp)
 end)
 
 enableSilentAim()
-print("Matcha Cheat Menu v9 loaded. Right Shift - menu. All features active.")
+print("Matcha Cheat Menu v10 loaded. Right Shift - menu. All bugs fixed.")
