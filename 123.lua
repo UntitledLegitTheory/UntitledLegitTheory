@@ -1,202 +1,477 @@
--- // Hoholware - Custom Version
-print("✅ Hoholware загружен!")
-
+-- // Advanced Cheat Menu - AIM+ESP+SILENT+SPEED+FLY+NOCLIP (Улучшенная версия)
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
-local rs = game:GetService("RunService")
-local uis = game:GetService("UserInputService")
+local runService = game:GetService("RunService")
+local userInputService = game:GetService("UserInputService")
+local players = game:GetService("Players")
 
-local speedEnabled = false
+-- Настройки (изменяемые)
+local aimlockEnabled = false
+local silentAimEnabled = false
+local espEnabled = false
+local speedHackEnabled = false
 local flyEnabled = false
 local noclipEnabled = false
-local godEnabled = false
 
-local speedMult = 2.8
-local flySpeed = 70
+local speedMultiplier = 2
+local flySpeed = 50
+local fovRadius = 120          -- градусов для поиска цели
+local smoothness = 0.25
+local teamCheck = true          -- не атаковать своих
 
-local velocity, gyro = nil, nil
+-- Внутренние переменные
+local target = nil
+local bodyVelocity = nil
+local bodyGyro = nil
+local originalWalkSpeed = 16    -- сохраним стандартную скорость
+local originalGravity = nil
+local flyActive = false
+local espObjects = {}            -- { [player] = {box, name} }
 
--- ==================== GUI ====================
-local sg = Instance.new("ScreenGui")
-sg.ResetOnSpawn = false
-sg.Parent = player:WaitForChild("PlayerGui")
+-- ==================== СОЗДАНИЕ GUI ====================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CheatMenu"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
 
-local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 340, 0, 420)
-main.Position = UDim2.new(0.5, -170, 0.5, -210)
-main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-main.Parent = sg
-Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 320, 0, 600)
+frame.Position = UDim2.new(0.5, -160, 0.5, -300)
+frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
 
 local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1,0,0,50)
-title.BackgroundTransparency = 1
-title.Text = "HOHOLWARE"
-title.TextColor3 = Color3.fromRGB(0, 255, 180)
+title.Size = UDim2.new(1, 0, 0, 45)
+title.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+title.Text = "⚡ Cheat Menu ⚡"
+title.TextColor3 = Color3.fromRGB(0, 255, 100)
 title.TextScaled = true
-title.Font = Enum.Font.GothamBlack
-title.Parent = main
+title.Font = Enum.Font.GothamBold
+title.Parent = frame
 
--- Drag
-title.InputBegan:Connect(function(inp)
-    if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-        local startPos = main.Position
-        local startMouse = inp.Position
-        local conn = uis.InputChanged:Connect(function(input)
-            if input.UserInputType == Enum.UserInputType.MouseMovement then
-                local delta = input.Position - startMouse
-                main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-            end
-        end)
-        inp.Changed:Connect(function()
-            if inp.UserInputState == Enum.UserInputState.End then conn:Disconnect() end
-        end)
-    end
-end)
-
-local panel = Instance.new("Frame")
-panel.Size = UDim2.new(1, -20, 1, -70)
-panel.Position = UDim2.new(0, 10, 0, 60)
-panel.BackgroundColor3 = Color3.fromRGB(22, 22, 27)
-panel.Parent = main
-Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 10)
-
-local header = Instance.new("TextLabel")
-header.Size = UDim2.new(1,0,0,40)
-header.BackgroundColor3 = Color3.fromRGB(25,25,32)
-header.Text = "MOVEMENT"
-header.TextColor3 = Color3.fromRGB(0, 255, 180)
-header.TextScaled = true
-header.Font = Enum.Font.GothamBold
-header.Parent = panel
-Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
-
-local function createToggle(name, y)
+-- Функция создания кнопки-переключателя
+local function createToggle(name, posY, default)
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0.92,0,0,42)
-    btn.Position = UDim2.new(0.04,0,0,y)
-    btn.BackgroundColor3 = Color3.fromRGB(30,30,35)
-    btn.Text = name .. " : OFF"
+    btn.Size = UDim2.new(0.9, 0, 0, 36)
+    btn.Position = UDim2.new(0.05, 0, 0, posY)
+    btn.BackgroundColor3 = default and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(200, 50, 50)
+    btn.Text = name .. ": " .. (default and "ON" or "OFF")
     btn.TextColor3 = Color3.new(1,1,1)
     btn.TextScaled = true
-    btn.Font = Enum.Font.GothamSemibold
-    btn.Parent = panel
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,8)
-
-    btn.MouseButton1Click:Connect(function()
-        if name == "Speed Hack" then speedEnabled = not speedEnabled
-        elseif name == "Fly Hack" then flyEnabled = not flyEnabled
-        elseif name == "Noclip" then noclipEnabled = not noclipEnabled
-        elseif name == "Godmode" then godEnabled = not godEnabled
-        end
-        btn.Text = name .. " : " .. (btn.Text:find("OFF") and "ON" or "OFF")
-        btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0,200,100) or Color3.fromRGB(30,30,35)
-    end)
+    btn.Font = Enum.Font.Gotham
+    btn.Parent = frame
+    return btn
 end
 
-createToggle("Speed Hack", 50)
-createToggle("Fly Hack", 105)
-createToggle("Noclip", 160)
-createToggle("Godmode", 215)
+-- Создаём кнопки
+local aimBtn     = createToggle("Aimlock", 55, false)
+local silentBtn  = createToggle("Silent Aim", 100, false)
+local espBtn     = createToggle("ESP", 145, false)
+local speedBtn   = createToggle("Speed Hack", 190, false)
+local flyBtn     = createToggle("Fly Hack", 235, false)
+local noclipBtn  = createToggle("Noclip", 280, false)
 
--- Ползунки
-local function createSlider(name, minv, maxv, default, y, callback)
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.92,0,0,48)
-    frame.Position = UDim2.new(0.04,0,0,y)
-    frame.BackgroundTransparency = 1
-    frame.Parent = panel
+-- Ползунки для настроек
+local function createSlider(name, posY, minVal, maxVal, defaultVal, callback)
+    local sliderFrame = Instance.new("Frame")
+    sliderFrame.Size = UDim2.new(0.9, 0, 0, 50)
+    sliderFrame.Position = UDim2.new(0.05, 0, 0, posY)
+    sliderFrame.BackgroundTransparency = 1
+    sliderFrame.Parent = frame
 
     local label = Instance.new("TextLabel")
-    label.Size = UDim2.new(1,0,0,20)
+    label.Size = UDim2.new(1, 0, 0, 20)
     label.BackgroundTransparency = 1
-    label.Text = name .. ": " .. default
+    label.Text = name .. ": " .. tostring(defaultVal)
     label.TextColor3 = Color3.new(1,1,1)
     label.TextScaled = true
     label.Font = Enum.Font.Gotham
-    label.Parent = frame
+    label.Parent = sliderFrame
 
-    local bar = Instance.new("Frame")
-    bar.Size = UDim2.new(1,0,0,6)
-    bar.Position = UDim2.new(0,0,0,28)
-    bar.BackgroundColor3 = Color3.fromRGB(40,40,45)
-    bar.Parent = frame
-    Instance.new("UICorner", bar).CornerRadius = UDim.new(1,0)
+    local slider = Instance.new("TextBox")
+    slider.Size = UDim2.new(1, 0, 0, 25)
+    slider.Position = UDim2.new(0, 0, 0, 22)
+    slider.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    slider.Text = tostring(defaultVal)
+    slider.TextColor3 = Color3.new(1,1,1)
+    slider.TextScaled = true
+    slider.Font = Enum.Font.Gotham
+    slider.Parent = sliderFrame
 
-    local fill = Instance.new("Frame")
-    fill.Size = UDim2.new(0.5,0,1,0)
-    fill.BackgroundColor3 = Color3.fromRGB(0, 255, 180)
-    fill.Parent = bar
-    Instance.new("UICorner", fill).CornerRadius = UDim.new(1,0)
-
-    bar.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-            local conn = uis.InputChanged:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseMovement then
-                    local percent = math.clamp((input.Position.X - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
-                    local value = minv + (maxv - minv) * percent
-                    fill.Size = UDim2.new(percent, 0, 1, 0)
-                    label.Text = name .. ": " .. string.format("%.1f", value)
-                    callback(value)
-                end
-            end)
-            inp.Changed:Connect(function()
-                if inp.UserInputState == Enum.UserInputState.End then conn:Disconnect() end
-            end)
+    local function update(value)
+        local num = tonumber(value)
+        if num then
+            num = math.clamp(num, minVal, maxVal)
+            label.Text = name .. ": " .. tostring(num)
+            callback(num)
         end
+    end
+
+    slider.FocusLost:Connect(function()
+        update(slider.Text)
+        slider.Text = tostring(callback()) -- показать текущее значение
     end)
+    update(defaultVal)
+    return callback
 end
 
-createSlider("Speed", 1, 6, speedMult, 100, function(v) speedMult = v end)
-createSlider("Fly", 30, 150, flySpeed, 165, function(v) flySpeed = v end)
+local fovValue = fovRadius
+local smoothValue = smoothness
+local speedMultValue = speedMultiplier
+local flySpeedValue = flySpeed
 
--- Логика
-rs.Heartbeat:Connect(function()
-    if player.Character and player.Character:FindFirstChild("Humanoid") then
-        player.Character.Humanoid.WalkSpeed = speedEnabled and 16 * speedMult or 16
+createSlider("FOV (градусы)", 335, 20, 360, fovRadius, function(val) fovValue = val end)
+createSlider("Smoothness (0-1)", 390, 0.05, 1, smoothness, function(val) smoothValue = val end)
+createSlider("Speed множитель", 445, 1, 10, speedMultiplier, function(val) speedMultValue = val; if speedHackEnabled then player.Character.Humanoid.WalkSpeed = originalWalkSpeed * speedMultValue end end)
+createSlider("Fly скорость", 500, 10, 200, flySpeed, function(val) flySpeedValue = val; if flyEnabled and bodyVelocity then bodyVelocity.Velocity = bodyVelocity.Velocity.Unit * flySpeedValue end end)
+
+-- Подсказка по клавишам
+local keyLabel = Instance.new("TextLabel")
+keyLabel.Size = UDim2.new(0.9, 0, 0, 60)
+keyLabel.Position = UDim2.new(0.05, 0, 0, 555)
+keyLabel.BackgroundTransparency = 1
+keyLabel.Text = "🔑 Keybinds:\nInsert - Menu | F - Aim | V - Silent | B - ESP | X - Speed | C - Fly | N - Noclip"
+keyLabel.TextColor3 = Color3.new(1,1,1)
+keyLabel.TextScaled = true
+keyLabel.TextYAlignment = Enum.TextYAlignment.Top
+keyLabel.Parent = frame
+
+-- ==================== FOV КРУГ (Drawing) ====================
+local fovCircle = nil
+if pcall(function() return Drawing.new("Circle") end) then
+    fovCircle = Drawing.new("Circle")
+    fovCircle.Thickness = 2
+    fovCircle.Color = Color3.fromRGB(0, 255, 100)
+    fovCircle.Transparency = 0.6
+    fovCircle.Filled = false
+    fovCircle.NumSides = 64
+    fovCircle.Visible = false
+    fovCircle.Radius = fovValue * 3.2
+else
+    warn("⚠️ Drawing API недоступна, FOV круг не будет работать")
+end
+
+-- ==================== ESP (Drawing) ====================
+local function createESP(plr)
+    if plr == player then return end
+    if espObjects[plr] then return end
+    local box, nameTag
+    if pcall(function() return Drawing.new("Square") end) then
+        box = Drawing.new("Square")
+        box.Thickness = 2
+        box.Color = Color3.fromRGB(255, 50, 50)
+        box.Filled = false
+        nameTag = Drawing.new("Text")
+        nameTag.Size = 16
+        nameTag.Color = Color3.new(1,1,1)
+        nameTag.Outline = true
+        nameTag.Center = true
+        espObjects[plr] = {box = box, name = nameTag}
+    end
+end
+
+for _, plr in ipairs(players:GetPlayers()) do createESP(plr) end
+
+players.PlayerAdded:Connect(createESP)
+players.PlayerRemoving:Connect(function(plr)
+    if espObjects[plr] then
+        if espObjects[plr].box then espObjects[plr].box:Remove() end
+        if espObjects[plr].name then espObjects[plr].name:Remove() end
+        espObjects[plr] = nil
     end
 end)
 
-rs.RenderStepped:Connect(function()
-    local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-    if flyEnabled and root then
-        if not velocity then
-            velocity = Instance.new("BodyVelocity")
-            gyro = Instance.new("BodyGyro")
-            velocity.MaxForce = Vector3.new(9e9,9e9,9e9)
-            gyro.MaxTorque = Vector3.new(9e9,9e9,9e9)
-            velocity.Parent = root
-            gyro.Parent = root
+-- ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+local function getNearestTarget()
+    local nearest, shortest = nil, fovValue
+    for _, plr in ipairs(players:GetPlayers()) do
+        if plr ~= player and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+            local hum = plr.Character:FindFirstChild("Humanoid")
+            if hum and hum.Health > 0 then
+                if teamCheck and plr.Team == player.Team then continue end
+                local root = plr.Character.HumanoidRootPart
+                local vector = (root.Position - camera.CFrame.Position)
+                local angle = math.acos(camera.CFrame.LookVector:Dot(vector.Unit)) * (180 / math.pi)
+                if angle < shortest then
+                    shortest = angle
+                    nearest = root
+                end
+            end
         end
-        local move = Vector3.new()
-        if uis:IsKeyDown(Enum.KeyCode.W) then move += camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
-        if uis:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.LeftShift) or uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
-        if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
+    end
+    return nearest
+end
 
-        velocity.Velocity = move.Unit * flySpeed
-        gyro.CFrame = camera.CFrame
-    elseif velocity then
-        velocity:Destroy()
-        gyro:Destroy()
-        velocity, gyro = nil, nil
+-- Безопасное восстановление скорости
+local function resetWalkSpeed()
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.WalkSpeed = originalWalkSpeed
+    end
+end
+
+-- Управление полётом
+local function disableFly()
+    if bodyVelocity then bodyVelocity:Destroy(); bodyVelocity = nil end
+    if bodyGyro then bodyGyro:Destroy(); bodyGyro = nil end
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        player.Character.Humanoid.PlatformStand = false
+        if originalGravity and workspace.Gravity ~= originalGravity then
+            workspace.Gravity = originalGravity
+        end
+    end
+    flyActive = false
+end
+
+local function enableFly()
+    if not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    local hum = player.Character:FindFirstChild("Humanoid")
+    if not root or not hum then return end
+
+    disableFly() -- чистим старые объекты
+    
+    -- Сохраняем гравитацию
+    if not originalGravity then originalGravity = workspace.Gravity end
+    workspace.Gravity = 0
+    hum.PlatformStand = true
+    
+    bodyVelocity = Instance.new("BodyVelocity")
+    bodyVelocity.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+    bodyVelocity.Parent = root
+    
+    bodyGyro = Instance.new("BodyGyro")
+    bodyGyro.MaxTorque = Vector3.new(1e9, 1e9, 1e9)
+    bodyGyro.CFrame = root.CFrame
+    bodyGyro.Parent = root
+    
+    flyActive = true
+end
+
+-- Обновление полёта в Heartbeat (для плавности)
+runService.Heartbeat:Connect(function(deltaTime)
+    if not flyEnabled or not flyActive or not player.Character then return end
+    local root = player.Character:FindFirstChild("HumanoidRootPart")
+    if not root or not bodyVelocity then return end
+    
+    local moveDirection = Vector3.new()
+    local cameraCFrame = camera.CFrame
+    
+    if userInputService:IsKeyDown(Enum.KeyCode.W) then moveDirection = moveDirection + cameraCFrame.LookVector end
+    if userInputService:IsKeyDown(Enum.KeyCode.S) then moveDirection = moveDirection - cameraCFrame.LookVector end
+    if userInputService:IsKeyDown(Enum.KeyCode.A) then moveDirection = moveDirection - cameraCFrame.RightVector end
+    if userInputService:IsKeyDown(Enum.KeyCode.D) then moveDirection = moveDirection + cameraCFrame.RightVector end
+    if userInputService:IsKeyDown(Enum.KeyCode.Space) then moveDirection = moveDirection + Vector3.new(0, 1, 0) end
+    if userInputService:IsKeyDown(Enum.KeyCode.LeftControl) then moveDirection = moveDirection - Vector3.new(0, 1, 0) end
+    
+    if moveDirection.Magnitude > 0 then
+        bodyVelocity.Velocity = moveDirection.Unit * flySpeedValue
+    else
+        bodyVelocity.Velocity = Vector3.new(0, 0, 0)
+    end
+    bodyGyro.CFrame = cameraCFrame
+end)
+
+-- ==================== ОСНОВНЫЕ ЛУПЫ ====================
+-- 1. Aimlock + FOV круг
+runService.RenderStepped:Connect(function()
+    if fovCircle then
+        fovCircle.Visible = (aimlockEnabled or silentAimEnabled) and camera.ViewportSize.X > 0
+        if fovCircle.Visible then
+            fovCircle.Radius = fovValue * 3.2
+            fovCircle.Position = Vector2.new(camera.ViewportSize.X/2, camera.ViewportSize.Y/2)
+        end
+    end
+    
+    if aimlockEnabled then
+        target = getNearestTarget()
+        if target and target.Parent and target.Parent:FindFirstChild("Humanoid") and target.Parent.Humanoid.Health > 0 then
+            local targetPos = target.Position + Vector3.new(0, 2.5, 0)
+            local direction = (targetPos - camera.CFrame.Position).Unit
+            local targetCFrame = CFrame.lookAt(camera.CFrame.Position, camera.CFrame.Position + direction)
+            camera.CFrame = camera.CFrame:Lerp(targetCFrame, smoothValue)
+        end
     end
 end)
 
-rs.Stepped:Connect(function()
+-- 2. Speed Hack (Heartbeat - стабильнее)
+runService.Heartbeat:Connect(function()
+    local char = player.Character
+    if not char then return end
+    local hum = char:FindFirstChild("Humanoid")
+    if not hum then return end
+    
+    if speedHackEnabled then
+        if hum.WalkSpeed ~= originalWalkSpeed * speedMultValue then
+            hum.WalkSpeed = originalWalkSpeed * speedMultValue
+        end
+    else
+        if hum.WalkSpeed ~= originalWalkSpeed then
+            hum.WalkSpeed = originalWalkSpeed
+        end
+    end
+end)
+
+-- 3. Noclip (Stepped - обновляем коллизию)
+runService.Stepped:Connect(function()
     if noclipEnabled and player.Character then
         for _, part in ipairs(player.Character:GetDescendants()) do
-            if part:IsA("BasePart") then part.CanCollide = false end
+            if part:IsA("BasePart") and part.CanCollide then
+                part.CanCollide = false
+            end
         end
     end
 end)
 
-uis.InputBegan:Connect(function(input)
-    if input.KeyCode == Enum.KeyCode.Insert then
-        main.Visible = not main.Visible
+-- 4. ESP (RenderStepped + защита от ошибок)
+runService.RenderStepped:Connect(function()
+    if not espEnabled then
+        for _, v in pairs(espObjects) do
+            if v.box then v.box.Visible = false end
+            if v.name then v.name.Visible = false end
+        end
+        return
+    end
+    
+    for plr, drawings in pairs(espObjects) do
+        if not plr or not plr.Character then
+            if drawings.box then drawings.box.Visible = false end
+            if drawings.name then drawings.name.Visible = false end
+            continue
+        end
+        local root = plr.Character:FindFirstChild("HumanoidRootPart")
+        local hum = plr.Character:FindFirstChild("Humanoid")
+        if not root or not hum or hum.Health <= 0 then
+            if drawings.box then drawings.box.Visible = false end
+            if drawings.name then drawings.name.Visible = false end
+            continue
+        end
+        
+        local screenPos, onScreen = camera:WorldToViewportPoint(root.Position)
+        if onScreen then
+            local top = camera:WorldToViewportPoint(root.Position + Vector3.new(0, 3, 0))
+            local bottom = camera:WorldToViewportPoint(root.Position - Vector3.new(0, 3, 0))
+            local height = (bottom.Y - top.Y)
+            if height > 0 then
+                drawings.box.Size = Vector2.new(height / 1.8, height)
+                drawings.box.Position = Vector2.new(screenPos.X - drawings.box.Size.X/2, screenPos.Y - drawings.box.Size.Y/2)
+                drawings.box.Visible = true
+                drawings.name.Text = plr.Name .. " [" .. math.floor(hum.Health) .. "hp]"
+                drawings.name.Position = Vector2.new(screenPos.X, screenPos.Y - drawings.box.Size.Y/2 - 15)
+                drawings.name.Visible = true
+            end
+        else
+            drawings.box.Visible = false
+            drawings.name.Visible = false
+        end
     end
 end)
 
-print("✅ Hoholware успешно загружен!")
+-- ==================== SILENT AIM (безопасный перехват) ====================
+local silentActive = false
+local oldNamecall = nil
+local mt = nil
+
+local function enableSilentAim()
+    if silentActive then return end
+    if not getrawmetatable then 
+        warn("getrawmetatable не поддерживается, Silent Aim отключён")
+        return 
+    end
+    mt = getrawmetatable(game)
+    if not mt then return end
+    oldNamecall = mt.__namecall
+    setreadonly(mt, false)
+    mt.__namecall = newcclosure(function(self, ...)
+        local method = getnamecallmethod()
+        local args = {...}
+        if method == "FireServer" and silentAimEnabled then
+            local targetRoot = getNearestTarget()
+            if targetRoot then
+                -- Пытаемся подменить позицию (первый аргумент обычно Vector3)
+                if type(args[1]) == "Vector3" then
+                    args[1] = targetRoot.Position + Vector3.new(0, 2.5, 0)
+                elseif type(args[2]) == "Vector3" then
+                    args[2] = targetRoot.Position + Vector3.new(0, 2.5, 0)
+                end
+            end
+        end
+        return oldNamecall(self, unpack(args))
+    end)
+    setreadonly(mt, true)
+    silentActive = true
+end
+
+local function disableSilentAim()
+    if not silentActive or not mt then return end
+    setreadonly(mt, false)
+    mt.__namecall = oldNamecall
+    setreadonly(mt, true)
+    silentActive = false
+end
+
+-- Включаем/выключаем silent aim при изменении настройки
+local function updateSilentAim()
+    if silentAimEnabled then
+        enableSilentAim()
+    else
+        disableSilentAim()
+    end
+end
+
+-- ==================== ОБРАБОТЧИКИ КНОПОК И KEYBINDS ====================
+local function toggleAim() aimlockEnabled = not aimlockEnabled; aimBtn.Text = "Aimlock: " .. (aimlockEnabled and "ON" or "OFF"); aimBtn.BackgroundColor3 = aimlockEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50) end
+local function toggleSilent() silentAimEnabled = not silentAimEnabled; silentBtn.Text = "Silent Aim: " .. (silentAimEnabled and "ON" or "OFF"); silentBtn.BackgroundColor3 = silentAimEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50); updateSilentAim() end
+local function toggleEsp() espEnabled = not espEnabled; espBtn.Text = "ESP: " .. (espEnabled and "ON" or "OFF"); espBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50) end
+local function toggleSpeed() speedHackEnabled = not speedHackEnabled; speedBtn.Text = "Speed Hack: " .. (speedHackEnabled and "ON" or "OFF"); speedBtn.BackgroundColor3 = speedHackEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50); if not speedHackEnabled then resetWalkSpeed() end end
+local function toggleFly() flyEnabled = not flyEnabled; flyBtn.Text = "Fly Hack: " .. (flyEnabled and "ON" or "OFF"); flyBtn.BackgroundColor3 = flyEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50); if flyEnabled then enableFly() else disableFly() end end
+local function toggleNoclip() noclipEnabled = not noclipEnabled; noclipBtn.Text = "Noclip: " .. (noclipEnabled and "ON" or "OFF"); noclipBtn.BackgroundColor3 = noclipEnabled and Color3.fromRGB(50,200,50) or Color3.fromRGB(200,50,50) end
+
+aimBtn.MouseButton1Click:Connect(toggleAim)
+silentBtn.MouseButton1Click:Connect(toggleSilent)
+espBtn.MouseButton1Click:Connect(toggleEsp)
+speedBtn.MouseButton1Click:Connect(toggleSpeed)
+flyBtn.MouseButton1Click:Connect(toggleFly)
+noclipBtn.MouseButton1Click:Connect(toggleNoclip)
+
+userInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if input.KeyCode == Enum.KeyCode.Insert then
+        frame.Visible = not frame.Visible
+    elseif input.KeyCode == Enum.KeyCode.F then
+        toggleAim()
+    elseif input.KeyCode == Enum.KeyCode.V then
+        toggleSilent()
+    elseif input.KeyCode == Enum.KeyCode.B then
+        toggleEsp()
+    elseif input.KeyCode == Enum.KeyCode.X then
+        toggleSpeed()
+    elseif input.KeyCode == Enum.KeyCode.C then
+        toggleFly()
+    elseif input.KeyCode == Enum.KeyCode.N then
+        toggleNoclip()
+    end
+end)
+
+-- ==================== ОЧИСТКА ПРИ ВЫХОДЕ ====================
+player.CharacterAdded:Connect(function()
+    resetWalkSpeed()
+    if flyEnabled then
+        task.wait(0.5)
+        enableFly()
+    end
+end)
+
+-- Обработка смены камеры (например, зритель)
+camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
+    if fovCircle then
+        fovCircle.Visible = false
+    end
+end)
+
+-- Инициализация silent aim (отключён по умолчанию)
+updateSilentAim()
+
+print("✅ Улучшенный Cheat Menu загружен! (Insert - меню)")
