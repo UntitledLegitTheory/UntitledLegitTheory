@@ -1,4 +1,4 @@
--- // Hoholware Menu - Финальная чистая версия
+-- // Hoholware - Финальная версия
 local player = game.Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local rs = game:GetService("RunService")
@@ -10,19 +10,17 @@ local noclipEnabled = false
 local godEnabled = false
 
 local speedMult = 2.8
-local flySpeed = 65
+local flySpeed = 70
 
-local velocity = nil
-local gyro = nil
+local velocity, gyro = nil, nil
 
--- ==================== GUI ====================
 local sg = Instance.new("ScreenGui")
 sg.ResetOnSpawn = false
 sg.Parent = player:WaitForChild("PlayerGui")
 
 local main = Instance.new("Frame")
-main.Size = UDim2.new(0, 320, 0, 380)
-main.Position = UDim2.new(0.5, -160, 0.5, -190)
+main.Size = UDim2.new(0, 340, 0, 420)
+main.Position = UDim2.new(0.5, -170, 0.5, -210)
 main.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 main.Parent = sg
 Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
@@ -53,7 +51,6 @@ title.InputBegan:Connect(function(inp)
     end
 end)
 
--- MOVEMENT Панель
 local panel = Instance.new("Frame")
 panel.Size = UDim2.new(1, -20, 1, -70)
 panel.Position = UDim2.new(0, 10, 0, 60)
@@ -71,7 +68,6 @@ header.Font = Enum.Font.GothamBold
 header.Parent = panel
 Instance.new("UICorner", header).CornerRadius = UDim.new(0, 10)
 
--- Toggle
 local function createToggle(name, y)
     local btn = Instance.new("TextButton")
     btn.Size = UDim2.new(0.92,0,0,42)
@@ -90,7 +86,6 @@ local function createToggle(name, y)
         elseif name == "Noclip" then noclipEnabled = not noclipEnabled
         elseif name == "Godmode" then godEnabled = not godEnabled
         end
-        
         btn.Text = name .. " : " .. (btn.Text:find("OFF") and "ON" or "OFF")
         btn.BackgroundColor3 = btn.Text:find("ON") and Color3.fromRGB(0,200,100) or Color3.fromRGB(30,30,35)
     end)
@@ -104,7 +99,7 @@ createToggle("Godmode", 215)
 -- Ползунки
 local function createSlider(name, minv, maxv, default, y, callback)
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0.92,0,0,50)
+    frame.Size = UDim2.new(0.92,0,0,48)
     frame.Position = UDim2.new(0.04,0,0,y)
     frame.BackgroundTransparency = 1
     frame.Parent = panel
@@ -120,7 +115,7 @@ local function createSlider(name, minv, maxv, default, y, callback)
 
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1,0,0,6)
-    bar.Position = UDim2.new(0,0,0,30)
+    bar.Position = UDim2.new(0,0,0,28)
     bar.BackgroundColor3 = Color3.fromRGB(40,40,45)
     bar.Parent = frame
     Instance.new("UICorner", bar).CornerRadius = UDim.new(1,0)
@@ -150,7 +145,7 @@ local function createSlider(name, minv, maxv, default, y, callback)
 end
 
 createSlider("Speed", 1, 6, speedMult, 100, function(v) speedMult = v end)
-createSlider("Fly", 30, 150, flySpeed, 170, function(v) flySpeed = v end)
+createSlider("Fly", 30, 150, flySpeed, 165, function(v) flySpeed = v end)
 
 -- Логика
 rs.Heartbeat:Connect(function()
@@ -175,7 +170,7 @@ rs.RenderStepped:Connect(function()
         if uis:IsKeyDown(Enum.KeyCode.S) then move -= camera.CFrame.LookVector end
         if uis:IsKeyDown(Enum.KeyCode.A) then move -= camera.CFrame.RightVector end
         if uis:IsKeyDown(Enum.KeyCode.D) then move += camera.CFrame.RightVector end
-        if uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
+        if uis:IsKeyDown(Enum.KeyCode.LeftShift) or uis:IsKeyDown(Enum.KeyCode.Space) then move += Vector3.new(0,1,0) end
         if uis:IsKeyDown(Enum.KeyCode.LeftControl) then move -= Vector3.new(0,1,0) end
 
         velocity.Velocity = move.Unit * flySpeed
@@ -195,11 +190,10 @@ rs.Stepped:Connect(function()
     end
 end)
 
--- Insert
 uis.InputBegan:Connect(function(input)
     if input.KeyCode == Enum.KeyCode.Insert then
         main.Visible = not main.Visible
     end
 end)
 
-print("✅ Hoholware Menu загружен!")
+print("✅ Hoholware успешно загружен!")
